@@ -1,0 +1,5 @@
+﻿venv/
+*.wav
+*.bin
+*.pth
+blobs/
