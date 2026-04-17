@@ -10,6 +10,7 @@ Wstepne GUI webowe i backend FastAPI dla lokalnego asystenta glosowego.
   - `GET /config/public`
   - `POST /synthesize`
   - `WS /ws/synthesize`
+  - `WS /ws/ears/listen`
 - GUI webowe serwowane z backendu:
   - `GET /`
   - statyczne pliki pod `GET /static/*`
@@ -42,3 +43,13 @@ pytest -q
 2. Dodaj statusy i konfiguracje do endpointow `GET /status` i `GET /config/public`.
 3. Dodaj eventy i akcje po stronie GUI (`app/web/static/js/app.js`).
 4. Dodaj testy API w `tests/api/routes/`.
+
+## Wake word stream (openwakeword)
+
+- Polaczenie: `ws://localhost:8000/ws/ears/listen`
+- Klient wysyla binarne chunki audio PCM16 mono.
+- Serwer zwraca eventy JSON:
+  - `ready`
+  - `listening`
+  - `wake_word_detected`
+  - `ears_not_ready`

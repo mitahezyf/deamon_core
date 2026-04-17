@@ -40,9 +40,39 @@
             <strong id="statusLanguage">-</strong>
           </article>
           <article class="card">
+            <span class="label">STT loaded</span>
+            <strong id="statusStt">-</strong>
+          </article>
+          <article class="card">
             <span class="label">API endpoint</span>
             <strong id="statusEndpoint">-</strong>
           </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Mikrofon i STT</h2>
+        <div class="row">
+          <div class="actions">
+            <button id="connectMicBtn" class="btn">Polacz mikrofon</button>
+            <button id="startCaptureBtn" class="btn ghost" disabled>Zacznij capture</button>
+            <button id="stopCaptureBtn" class="btn danger" disabled>Zatrzymaj i transkrybuj</button>
+            <button id="disconnectMicBtn" class="btn ghost" disabled>Rozlacz mikrofon</button>
+          </div>
+        </div>
+        <div class="grid metrics-grid">
+          <article class="card">
+            <span class="label">Mic sample rate</span>
+            <strong id="metricMicRate">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">Ostatni event ears</span>
+            <strong id="metricEarsEvent">-</strong>
+          </article>
+        </div>
+        <div class="stack" style="margin-top: 0.75rem">
+          <label for="sttTranscript">Transkrypcja</label>
+          <textarea id="sttTranscript" rows="4" readonly></textarea>
         </div>
       </section>
 

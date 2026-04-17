@@ -39,7 +39,32 @@ def vox_mock(mocker):
 
 
 @pytest.fixture
-def test_client(vox_mock):
+def ears_mock(mocker):
+    mock_ears_class = mocker.patch("app.api.main.DaemonEars", autospec=True)
+    mock_instance = mock_ears_class.return_value
+    mock_instance.is_loaded = True
+    mock_instance.process_audio_chunk.return_value = {
+        "event": "listening",
+        "detected": False,
+        "label": "daemon",
+        "score": 0.1,
+        "threshold": 0.5,
+        "stt_enabled": False,
+    }
+    return mock_instance
+
+
+@pytest.fixture
+def stt_mock(mocker):
+    mock_stt_class = mocker.patch("app.api.main.DaemonStt", autospec=True)
+    mock_instance = mock_stt_class.return_value
+    mock_instance.is_loaded = True
+    mock_instance.transcribe_pcm16.return_value = "testowa transkrypcja"
+    return mock_instance
+
+
+@pytest.fixture
+def test_client(vox_mock, ears_mock, stt_mock):
     """Klient HTTP/WS oparty o realny lifecycle aplikacji."""
     with TestClient(app) as client:
         yield client

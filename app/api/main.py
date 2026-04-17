@@ -10,7 +10,9 @@ from app.api.routes.http import router as http_router
 from app.api.routes.ui import router as ui_router
 from app.api.routes.ws import router as ws_router
 from app.core.config import settings
+from app.core.ears import DaemonEars
 from app.core.logger import get_logger
+from app.core.stt import DaemonStt
 from app.core.vox import DaemonVox
 
 log = get_logger("api")
@@ -24,6 +26,21 @@ async def lifespan(app: FastAPI):
     vox.load()
     vox.warmup()
     app.state.vox = vox
+
+    ears = DaemonEars()
+    try:
+        ears.load()
+    except Exception as exc:
+        log.warning("Ears load skipped: %s", exc)
+    app.state.ears = ears
+
+    stt = DaemonStt()
+    try:
+        stt.load()
+    except Exception as exc:
+        log.warning("STT load skipped: %s", exc)
+    app.state.stt = stt
+
     log.info(
         "Daemon gotowy | LLM: %s | port: %d",
         settings.llm_model,
@@ -32,6 +49,8 @@ async def lifespan(app: FastAPI):
     yield
     # sprzątanie przy wyłączeniu
     log.info("Daemon zatrzymywany...")
+    del app.state.stt
+    del app.state.ears
     del app.state.vox
     log.info("Daemon zatrzymany.")
 

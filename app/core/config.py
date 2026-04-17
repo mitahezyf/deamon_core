@@ -22,6 +22,15 @@ class DaemonSettings(BaseSettings):
     language: str = "pl"
     tts_model: str = "tts_models/multilingual/multi-dataset/xtts_v2"
     whisper_model: str = "large-v3"
+    stt_enabled: bool = False
+    stt_sample_rate: int = 16000
+    stt_min_seconds: float = 0.35
+
+    # --- Wake Word ---
+    wake_word_enabled: bool = True
+    wake_word_backend: str = "openwakeword"
+    wake_word_label: str = "daemon"
+    wake_word_threshold: float = 0.5
 
     # --- Ścieżki ---
     # project_dir jest auto-wykrywany z lokalizacji tego pliku
@@ -30,6 +39,7 @@ class DaemonSettings(BaseSettings):
     cache_path: Optional[Path] = None
     output_dir: Optional[Path] = None
     wake_word_model: Optional[Path] = None
+    openwakeword_model_path: Optional[Path] = None
     chroma_db_path: Optional[Path] = None
     sqlite_path: Optional[Path] = None
 
@@ -42,7 +52,7 @@ class DaemonSettings(BaseSettings):
     # DAEMON_DEBUG_MODE=true w .env włącza logi DEBUG we wszystkich modułach
     debug_mode: bool = False
 
-    # --- Wake Word (Picovoice Porcupine) ---
+    # --- Wake Word (legacy Picovoice Porcupine) ---
     # klucz dostępny na https://console.picovoice.ai/
     porcupine_access_key: str = ""
 
@@ -58,6 +68,10 @@ class DaemonSettings(BaseSettings):
         if self.wake_word_model is None:
             self.wake_word_model = (
                 self.project_dir / "models" / "wake_word" / "daemon_windows.ppn"
+            )
+        if self.openwakeword_model_path is None:
+            self.openwakeword_model_path = (
+                self.project_dir / "models" / "wake_word" / "daemon.onnx"
             )
         if self.chroma_db_path is None:
             self.chroma_db_path = self.project_dir / "data" / "chromadb"
