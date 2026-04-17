@@ -1,5 +1,62 @@
-﻿venv/
-*.wav
-*.bin
-*.pth
-blobs/
+# --- Python / venv ---
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# --- Packaging / build artifacts ---
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- Tool caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+
+# --- Coverage / reports ---
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# --- IDE / OS ---
+.idea/
+*.iml
+.vscode/
+Thumbs.db
+Desktop.ini
+
+# --- Local env / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Runtime data ---
+data/
+logs/
+tmp/
+temp/
+
+# --- Generated audio/cache outputs ---
+daemon_voice_cache.pth
+tests/daemon_out.wav
+tests/daemon_final.wav
+tests/infer_cli_basic.wav
+
+# --- Optional large model artifacts (keep placeholders like .gitkeep) ---
+*.onnx
+*.ppn
+*.safetensors
+*.ckpt
+
+bin/
