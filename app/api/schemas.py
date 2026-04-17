@@ -27,3 +27,24 @@ class HealthResponse(BaseModel):
     device: str
     llm_model: str
     api_port: int
+
+
+class StatusResponse(BaseModel):
+    status: str
+    vox_loaded: bool
+    device: str
+    llm_model: str
+    language: str
+    api_host: str
+    api_port: int
+
+
+class PublicConfigResponse(BaseModel):
+    llm_model: str
+    ollama_url: str
+    language: str
+    whisper_model: str
+    tts_model: str
+    api_host: str
+    api_port: int
+    wake_word_model: str

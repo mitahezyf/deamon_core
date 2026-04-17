@@ -12,6 +12,30 @@ def test_health_endpoint(test_client, vox_mock):
     vox_mock.warmup.assert_called_once()
 
 
+def test_status_endpoint(test_client):
+    response = test_client.get("/status")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["vox_loaded"] is True
+    assert data["device"] in ["cpu", "cuda"]
+    assert data["language"] == "pl"
+    assert data["api_port"] == 8000
+
+
+def test_public_config_endpoint(test_client):
+    response = test_client.get("/config/public")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["llm_model"]
+    assert data["ollama_url"].startswith("http")
+    assert data["language"] == "pl"
+    assert data["tts_model"]
+    assert data["wake_word_model"].endswith("daemon_windows.ppn")
+
+
 def test_synthesize_endpoint(test_client, vox_mock, mocker, tmp_path):
     # Podmieniamy domyślny folder testów na tymczasowy
     mocker.patch("app.api.routes.http.settings.output_dir", tmp_path)

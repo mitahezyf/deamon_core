@@ -60,3 +60,4 @@ tests/infer_cli_basic.wav
 *.ckpt
 
 bin/
+markdown/

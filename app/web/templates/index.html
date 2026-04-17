@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>DAEMON Control Panel</h1>
+        <p>Wstepne GUI webowe do testow pipeline i integracji modeli.</p>
+      </div>
+      <button id="refreshStatusBtn" class="btn ghost">Odswiez status</button>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h2>Status runtime</h2>
+        <div class="grid status-grid">
+          <article class="card">
+            <span class="label">API</span>
+            <strong id="statusApi">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">VOX loaded</span>
+            <strong id="statusVox">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">Device</span>
+            <strong id="statusDevice">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">LLM model</span>
+            <strong id="statusLlm">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">Language</span>
+            <strong id="statusLanguage">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">API endpoint</span>
+            <strong id="statusEndpoint">-</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Synteza i streaming</h2>
+        <div class="stack">
+          <label for="textInput">Tekst wejsciowy</label>
+          <textarea id="textInput" rows="5" placeholder="Wpisz tekst do syntezy"></textarea>
+        </div>
+        <div class="row">
+          <div class="stack flex-1">
+            <label for="outputName">Nazwa pliku wav</label>
+            <input id="outputName" type="text" value="gui_out.wav" />
+          </div>
+          <div class="actions">
+            <button id="synthesizeBtn" class="btn">Synthesize (REST)</button>
+            <button id="streamBtn" class="btn">Stream (WebSocket)</button>
+            <button id="stopStreamBtn" class="btn danger">Stop stream</button>
+          </div>
+        </div>
+        <div class="grid metrics-grid">
+          <article class="card">
+            <span class="label">First chunk latency</span>
+            <strong id="metricFirstChunk">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">Total time</span>
+            <strong id="metricTotal">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">Audio duration</span>
+            <strong id="metricDuration">-</strong>
+          </article>
+          <article class="card">
+            <span class="label">Output file</span>
+            <strong id="metricOutput">-</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Miejsca pod modele</h2>
+        <div class="grid integration-grid">
+          <article class="slot">
+            <h3>Ears (Wake Word + STT)</h3>
+            <p id="slotEars">openWakeWord / Faster-Whisper: pending integration</p>
+            <button class="btn ghost" disabled>Podlacz module ears</button>
+          </article>
+          <article class="slot">
+            <h3>Brain (LLM + Routing)</h3>
+            <p id="slotBrain">Qwen / Ollama: pending integration</p>
+            <button class="btn ghost" disabled>Podlacz module brain</button>
+          </article>
+          <article class="slot">
+            <h3>Memory (RAG)</h3>
+            <p id="slotMemory">ChromaDB + SQLite: pending integration</p>
+            <button class="btn ghost" disabled>Podlacz module memory</button>
+          </article>
+          <article class="slot">
+            <h3>Tools (Web)</h3>
+            <p id="slotTools">DuckDuckGo + parser: pending integration</p>
+            <button class="btn ghost" disabled>Podlacz module tools</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Event log</h2>
+        <pre id="eventLog" class="logbox"></pre>
+      </section>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>
