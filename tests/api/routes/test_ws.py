@@ -1,4 +1,5 @@
 import struct
+import time
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
@@ -103,6 +104,45 @@ def test_ws_ears_flush_without_audio_returns_empty_transcript(test_client):
         event = websocket.receive_json()
         assert event["event"] == "transcript"
         assert event["text"] == ""
+        assert event["reject_reason"] == "empty_audio"
+
+
+def test_ws_ears_stop_capture_returns_too_short_reason_when_empty_text(
+    test_client, stt_mock
+):
+    stt_mock.transcribe_pcm16.return_value = ""
+
+    with test_client.websocket_connect("/ws/ears/listen") as websocket:
+        websocket.receive_json()
+        websocket.send_text("start_capture")
+        websocket.receive_json()
+        websocket.send_bytes((b"\x01\x00") * 1600)
+        websocket.receive_json()
+        websocket.send_text("stop_capture")
+        event = websocket.receive_json()
+
+    assert event["event"] == "transcript"
+    assert event["text"] == ""
+    assert event["reject_reason"] == "too_short_audio"
+
+
+def test_ws_ears_stop_capture_returns_too_quiet_reason_when_empty_text(
+    test_client, stt_mock
+):
+    stt_mock.transcribe_pcm16.return_value = ""
+
+    with test_client.websocket_connect("/ws/ears/listen") as websocket:
+        websocket.receive_json()
+        websocket.send_text("start_capture")
+        websocket.receive_json()
+        websocket.send_bytes((b"\x00\x00") * 6000)
+        websocket.receive_json()
+        websocket.send_text("stop_capture")
+        event = websocket.receive_json()
+
+    assert event["event"] == "transcript"
+    assert event["text"] == ""
+    assert event["reject_reason"] == "too_quiet_audio"
 
 
 def test_ws_ears_unknown_command(test_client):
@@ -220,3 +260,53 @@ def test_ws_ears_listen_detects_wake_word(test_client, ears_mock):
     assert event["event"] == "wake_word_detected"
     assert event["detected"] is True
     assert event["label"] == "daemon"
+
+
+def test_ws_ears_emits_partial_transcript_during_capture(
+    test_client, stt_mock, monkeypatch
+):
+    monkeypatch.setattr("app.core.audio_pipeline_v2.settings.stt_partial_enabled", True)
+    monkeypatch.setattr(
+        "app.core.audio_pipeline_v2.settings.stt_partial_min_seconds", 0.01
+    )
+    monkeypatch.setattr(
+        "app.core.audio_pipeline_v2.settings.stt_partial_interval_seconds", 0.0
+    )
+
+    with test_client.websocket_connect("/ws/ears/listen") as websocket:
+        websocket.receive_json()
+        websocket.send_text("start_capture")
+        websocket.receive_json()
+        websocket.send_bytes((b"\x01\x00") * 1600)
+        first = websocket.receive_json()
+        second = websocket.receive_json()
+
+    assert first["event"] == "listening"
+    assert second["event"] == "partial_transcript"
+    assert second["text"] == "testowa transkrypcja"
+
+
+def test_ws_ears_auto_stops_after_silence_timeout(test_client, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.audio_pipeline_v2.settings.stt_silence_stop_seconds", 0.01
+    )
+    monkeypatch.setattr(
+        "app.core.audio_pipeline_v2.settings.stt_partial_enabled", False
+    )
+
+    with test_client.websocket_connect("/ws/ears/listen") as websocket:
+        websocket.receive_json()
+        websocket.send_text("start_capture")
+        websocket.receive_json()
+
+        websocket.send_bytes((b"\x01\x00") * 1600)
+        websocket.receive_json()
+        time.sleep(0.02)
+
+        websocket.send_bytes((b"\x00\x00") * 1600)
+        first = websocket.receive_json()
+        second = websocket.receive_json()
+
+    assert first["event"] == "listening"
+    assert second["event"] == "transcript"
+    assert second["stop_reason"] == "silence_timeout"

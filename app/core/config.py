@@ -25,6 +25,11 @@ class DaemonSettings(BaseSettings):
     stt_enabled: bool = False
     stt_sample_rate: int = 16000
     stt_min_seconds: float = 0.35
+    stt_min_rms: float = 0.008
+    stt_silence_stop_seconds: float = 2.0
+    stt_partial_enabled: bool = True
+    stt_partial_interval_seconds: float = 0.8
+    stt_partial_min_seconds: float = 0.6
 
     # --- Wake Word ---
     wake_word_enabled: bool = True

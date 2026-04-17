@@ -1,4 +1,5 @@
 const SAMPLE_RATE = 24000;
+const MIC_BUFFER_SIZE = 1024;
 
 const els = {
   refreshStatusBtn: document.getElementById("refreshStatusBtn"),
@@ -41,6 +42,7 @@ let micCtx = null;
 let micProcessor = null;
 let micMutedGain = null;
 let micCapturing = false;
+let pttPressActive = false;
 
 function logLine(message, kind = "info") {
   const ts = new Date().toLocaleTimeString("pl-PL", { hour12: false });
@@ -178,15 +180,15 @@ async function setupMicrophonePipeline() {
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       channelCount: 1,
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
     },
   });
 
-  micCtx = new AudioContext();
+  micCtx = new AudioContext({ latencyHint: "interactive" });
   const source = micCtx.createMediaStreamSource(micStream);
-  micProcessor = micCtx.createScriptProcessor(4096, 1, 1);
+  micProcessor = micCtx.createScriptProcessor(MIC_BUFFER_SIZE, 1, 1);
   micMutedGain = micCtx.createGain();
   micMutedGain.gain.value = 0;
 
@@ -237,9 +239,19 @@ function handleEarsEvent(data) {
   const eventName = data.event || "unknown";
   els.metricEarsEvent.textContent = eventName;
 
+  if (eventName === "partial_transcript") {
+    els.sttTranscript.value = data.text || "";
+    return;
+  }
+
   if (eventName === "transcript") {
     els.sttTranscript.value = data.text || "";
-    logLine(`STT: ${data.text || "(pusto)"}`, data.text ? "ok" : "info");
+    if (data.text) {
+      logLine(`STT: ${data.text}`, "ok");
+    } else {
+      const reason = data.reject_reason || "unknown";
+      logLine(`STT: (pusto) [powod: ${reason}]`, "info");
+    }
     micCapturing = false;
     setMicButtons();
     return;
@@ -316,6 +328,10 @@ function startCapture() {
     return;
   }
 
+  if (micCapturing) {
+    return;
+  }
+
   micCapturing = true;
   setMicButtons();
   earsWs.send("start_capture");
@@ -325,7 +341,27 @@ function stopCapture() {
   if (!earsWs || earsWs.readyState !== WebSocket.OPEN) {
     return;
   }
+  if (!micCapturing) {
+    return;
+  }
   earsWs.send("stop_capture");
+}
+
+function onPttPress(event) {
+  event.preventDefault();
+  if (pttPressActive) {
+    return;
+  }
+  pttPressActive = true;
+  startCapture();
+}
+
+function onPttRelease(event) {
+  event.preventDefault();
+  if (!pttPressActive) {
+    return;
+  }
+  pttPressActive = false;
 }
 
 function disconnectMic() {
@@ -382,6 +418,12 @@ function bindEvents() {
   els.stopStreamBtn.addEventListener("click", stopStream);
   els.connectMicBtn.addEventListener("click", connectMic);
   els.startCaptureBtn.addEventListener("click", startCapture);
+  els.startCaptureBtn.addEventListener("mousedown", onPttPress);
+  els.startCaptureBtn.addEventListener("mouseup", onPttRelease);
+  els.startCaptureBtn.addEventListener("mouseleave", onPttRelease);
+  els.startCaptureBtn.addEventListener("touchstart", onPttPress, { passive: false });
+  els.startCaptureBtn.addEventListener("touchend", onPttRelease, { passive: false });
+  els.startCaptureBtn.addEventListener("touchcancel", onPttRelease, { passive: false });
   els.stopCaptureBtn.addEventListener("click", stopCapture);
   els.disconnectMicBtn.addEventListener("click", disconnectMic);
 }
