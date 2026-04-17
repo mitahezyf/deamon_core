@@ -12,7 +12,7 @@ logging.basicConfig(
 log = logging.getLogger("daemon_vox_client")
 
 # Klient do komunikacji z daemon_vox.py --server
-# Użycie: python daemon_vox_client.py "tekst do wypowiedzenia"
+# Uzycie: python daemon_vox_client.py "tekst do wypowiedzenia"
 
 HOST = "127.0.0.1"
 PORT = 59721

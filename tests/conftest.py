@@ -11,7 +11,7 @@ os.environ["DAEMON_DEBUG_MODE"] = "true"
 
 @pytest.fixture
 def vox_mock(mocker):
-    """Mock DaemonVox używany przez lifespan FastAPI."""
+    """Mock DaemonVox uzywany przez lifespan FastAPI."""
     mock_vox_class = mocker.patch("app.api.main.DaemonVox", autospec=True)
     mock_instance = mock_vox_class.return_value
 

@@ -32,7 +32,7 @@ class DaemonSettings(BaseSettings):
     wake_word_label: str = "daemon"
     wake_word_threshold: float = 0.5
 
-    # --- Ścieżki ---
+    # --- Sciezki ---
     # project_dir jest auto-wykrywany z lokalizacji tego pliku
     project_dir: Path = Path(__file__).parent.parent.parent
     samples_dir: Optional[Path] = None
@@ -44,21 +44,21 @@ class DaemonSettings(BaseSettings):
     sqlite_path: Optional[Path] = None
 
     # --- Serwer API ---
-    # 0.0.0.0 = dostępny w sieci LAN dla innych urządzeń
-    api_host: str = "0.0.0.0"  # nosec B104 - celowe nasłuchiwanie LAN dla web GUI
+    # 0.0.0.0 = dostepny w sieci LAN dla innych urzadzen
+    api_host: str = "0.0.0.0"  # nosec B104 - celowe nasuchiwanie LAN dla web GUI
     api_port: int = 8000
 
     # --- Tryb debugowania ---
-    # DAEMON_DEBUG_MODE=true w .env włącza logi DEBUG we wszystkich modułach
+    # DAEMON_DEBUG_MODE=true w .env wacza logi DEBUG we wszystkich moduach
     debug_mode: bool = False
 
     # --- Wake Word (legacy Picovoice Porcupine) ---
-    # klucz dostępny na https://console.picovoice.ai/
+    # klucz dostepny na https://console.picovoice.ai/
     porcupine_access_key: str = ""
 
     @model_validator(mode="after")
     def _ustaw_domyslne_sciezki(self) -> "DaemonSettings":
-        # ustawia ścieżki pochodne od project_dir jeśli nie podano w .env
+        # ustawia sciezki pochodne od project_dir jesli nie podano w .env
         if self.samples_dir is None:
             self.samples_dir = self.project_dir / "voice_samples"
         if self.cache_path is None:

@@ -96,7 +96,7 @@ async def synthesize(req: SynthesizeRequest, request: Request):
     vox = request.app.state.vox
     output_path = settings.output_dir / req.output  # type: ignore[operator]
     result = vox.synthesize_to_file(req.text, output_path)
-    log.info("POST /synthesize zakończony | total=%.3fs", result["total_time"])
+    log.info("POST /synthesize zakonczony | total=%.3fs", result["total_time"])
     return SynthesizeResponse(**result)
 
 

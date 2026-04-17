@@ -2,8 +2,8 @@ import logging
 
 from app.core.vox import DaemonVox
 
-# skrypt jednorazowy do przebudowania cache embeddingów głosu
-# użyj gdy dodasz nowe próbki do voice_samples/
+# skrypt jednorazowy do przebudowania cache embeddingow gosu
+# uzyj gdy dodasz nowe probki do voice_samples/
 # uruchom: python scripts/build_voice_cache.py
 
 

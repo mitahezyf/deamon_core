@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "daemon"
 version = "0.1.0"
-description = "Lokalny, multimodalny asystent AI sterowany głosem"
+description = "Lokalny, multimodalny asystent AI sterowany gosem"
 requires-python = ">=3.11"
 dependencies = [
     # backend
@@ -24,9 +24,9 @@ dependencies = [
     # Wake word
     "pvporcupine>=3.0.0",
     "openwakeword>=0.6.0",
-    # pamięć
+    # pamiec
     "chromadb>=0.5.0",
-    # narzędzia (internet)
+    # narzedzia (internet)
     "duckduckgo-search>=6.0",
     "beautifulsoup4>=4.12",
     "requests>=2.31",

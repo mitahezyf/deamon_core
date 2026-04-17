@@ -1,1 +1,1 @@
-# Główny katalog aplikacji DAEMON
+# Gowny katalog aplikacji DAEMON

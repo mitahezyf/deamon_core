@@ -2,13 +2,13 @@ from app.core.config import DaemonSettings
 
 
 def test_settings_defaults():
-    # Test czy domyślne ścieżki i wartości są ustawiane poprawnie
+    # Test czy domyslne sciezki i wartosci sa ustawiane poprawnie
     settings = DaemonSettings(_env_file=None)
     assert settings.api_port == 8000
     assert settings.api_host == "0.0.0.0"
     assert settings.language == "pl"
 
-    # Sprawdzenie auto-wykrywania ścieżek
+    # Sprawdzenie auto-wykrywania sciezek
     assert settings.samples_dir is not None
     assert settings.samples_dir.name == "voice_samples"
 
@@ -17,7 +17,7 @@ def test_settings_defaults():
 
 
 def test_settings_overrides(monkeypatch):
-    # Test czy zmienne środowiskowe nadpisują domyślne wartości
+    # Test czy zmienne srodowiskowe nadpisuja domyslne wartosci
     monkeypatch.setenv("DAEMON_API_PORT", "9000")
     monkeypatch.setenv("DAEMON_DEBUG_MODE", "true")
     monkeypatch.setenv("DAEMON_LANGUAGE", "en")

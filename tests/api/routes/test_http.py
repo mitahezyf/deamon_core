@@ -54,11 +54,11 @@ def test_public_config_endpoint(test_client):
 
 
 def test_synthesize_endpoint(test_client, vox_mock, mocker, tmp_path):
-    # Podmieniamy domyślny folder testów na tymczasowy
+    # Podmieniamy domyslny folder testow na tymczasowy
     mocker.patch("app.api.routes.http.settings.output_dir", tmp_path)
 
     payload = {
-        "text": "Witaj świecie!",
+        "text": "Witaj swiecie!",
         "output": "test_output.wav",
     }
 
@@ -70,7 +70,7 @@ def test_synthesize_endpoint(test_client, vox_mock, mocker, tmp_path):
     assert "total_time" in data
     assert data["output"].endswith("test_output.wav")
 
-    # Upewniamy się, że plik został stworzony
+    # Upewniamy sie, ze plik zosta stworzony
     assert (tmp_path / "test_output.wav").exists()
     vox_mock.synthesize_to_file.assert_called_once()
     _, called_output = vox_mock.synthesize_to_file.call_args.args

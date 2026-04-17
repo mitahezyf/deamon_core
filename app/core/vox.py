@@ -49,19 +49,19 @@ class DaemonVox:
         self._gpt_cond_latent = None
         self._speaker_embedding = None
         self._device: str = "cuda" if torch.cuda.is_available() else "cpu"
-        log.debug("DaemonVox zainicjalizowany, urządzenie: %s", self._device)
+        log.debug("DaemonVox zainicjalizowany, urzadzenie: %s", self._device)
 
     # --- publiczne API ---
 
     def load(self) -> None:
         # laduje model i cache glosu, wywolac raz przy starcie serwera
-        log.info("Ładowanie silnika głosu...")
+        log.info("adowanie silnika gosu...")
         self._tts = self._zaladuj_model()
         probki = self._zbierz_probki()
         self._gpt_cond_latent, self._speaker_embedding = self._zaladuj_lub_zbuduj_cache(
             probki
         )
-        log.info("Silnik głosu gotowy.")
+        log.info("Silnik gosu gotowy.")
 
     def warmup(self) -> None:
         # rozgrzewka CUDA, pierwsze wywolanie jest wolniejsze przez JIT kerneli
@@ -81,7 +81,7 @@ class DaemonVox:
 
     def rebuild_cache(self) -> None:
         # przebudowuje cache embeddingow ze wszystkich probek
-        log.info("Przebudowywanie cache embeddingów głosu...")
+        log.info("Przebudowywanie cache embeddingow gosu...")
         if self._tts is None:
             self._tts = self._zaladuj_model()
         probki = self._zbierz_probki()
@@ -94,13 +94,13 @@ class DaemonVox:
         )
         self._gpt_cond_latent = dane["gpt_cond_latent"]
         self._speaker_embedding = dane["speaker_embedding"]
-        log.info("Cache przebudowany i załadowany.")
+        log.info("Cache przebudowany i zaadowany.")
 
     def stream_chunks(self, text: str) -> Iterator[np.ndarray]:
         # generator zwraca kolejne chunki PCM (numpy float32)
         # to pozwala odtwarzac audio zanim caly tekst zostanie wygenerowany
         self._assert_loaded()
-        log.debug("Rozpoczynam syntezę strumieniową: %r", text[:60])
+        log.debug("Rozpoczynam synteze strumieniowa: %r", text[:60])
         model = self._tts.synthesizer.tts_model  # type: ignore[union-attr]
         chunk_count = 0
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
@@ -113,10 +113,10 @@ class DaemonVox:
             ):
                 chunk_count += 1
                 log.debug(
-                    "Chunk #%d wygenerowany (%d próbek)", chunk_count, chunk.shape[-1]
+                    "Chunk #%d wygenerowany (%d probek)", chunk_count, chunk.shape[-1]
                 )
                 yield chunk.cpu().numpy()
-        log.debug("Synteza zakończona, chunków: %d", chunk_count)
+        log.debug("Synteza zakonczona, chunkow: %d", chunk_count)
 
     def synthesize_to_file(self, text: str, output_path: Path) -> dict:
         # syntetyzuje tekst i zapisuje WAV, zwraca statystyki latencji
@@ -154,10 +154,10 @@ class DaemonVox:
 
     def _assert_loaded(self) -> None:
         if self._tts is None:
-            raise RuntimeError("Najpierw wywołaj DaemonVox.load()")
+            raise RuntimeError("Najpierw wywoaj DaemonVox.load()")
 
     def _zaladuj_model(self) -> TTS:
-        log.info("Ładowanie modelu XTTS v2 na %s...", self._device)
+        log.info("adowanie modelu XTTS v2 na %s...", self._device)
         tts = TTS(settings.tts_model).to(self._device)
         model = tts.synthesizer.tts_model
         model.eval()
@@ -165,18 +165,18 @@ class DaemonVox:
             model.half()
             log.info("Tryb FP16 aktywny")
         except Exception as e:
-            log.warning("FP16 niedostępne: %s", e)
+            log.warning("FP16 niedostepne: %s", e)
         return tts
 
     def _zbierz_probki(self) -> list[str]:
         pliki = sorted(settings.samples_dir.glob("*.wav"))  # type: ignore[union-attr]
         if not pliki:
-            raise FileNotFoundError(f"Brak plików .wav w {settings.samples_dir}")
-        log.info("Próbki głosu: %s", [p.name for p in pliki])
+            raise FileNotFoundError(f"Brak plikow .wav w {settings.samples_dir}")
+        log.info("Probki gosu: %s", [p.name for p in pliki])
         return [str(p) for p in pliki]
 
     def _zbuduj_cache(self, probki: list[str]) -> None:
-        log.info("Obliczam embeddingi głosu z %d próbek...", len(probki))
+        log.info("Obliczam embeddingi gosu z %d probek...", len(probki))
         model = self._tts.synthesizer.tts_model  # type: ignore[union-attr]
         # tymczasowo float32, get_conditioning_latents nie obsluguje FP16
         model.float()
@@ -198,7 +198,7 @@ class DaemonVox:
 
     def _zaladuj_lub_zbuduj_cache(self, probki: list[str]):
         if settings.cache_path.exists():  # type: ignore[union-attr]
-            log.info("Ładowanie cache: %s", settings.cache_path.name)  # type: ignore[union-attr]
+            log.info("adowanie cache: %s", settings.cache_path.name)  # type: ignore[union-attr]
             dane = torch.load(
                 settings.cache_path,
                 map_location=self._tts.synthesizer.tts_model.device,  # type: ignore[union-attr]

@@ -1,6 +1,6 @@
 # Pre-commit hooks dla JustDownIt
 repos:
-  # Isort - sortowanie importów (przed black)
+  # Isort - sortowanie importow (przed black)
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks:
@@ -35,7 +35,7 @@ repos:
           - types-requests
         args: [--ignore-missing-imports]
 
-  # Bandit - security (Zmienione ścieżki na core i api)
+  # Bandit - security (Zmienione sciezki na core i api)
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.6
     hooks:
@@ -60,14 +60,14 @@ repos:
       - id: check-merge-conflict
       - id: debug-statements
 
-# Vulture - martwy kod (Zmienione ścieżki)
+# Vulture - martwy kod (Zmienione sciezki)
   - repo: https://github.com/jendrikseipp/vulture
     rev: v2.14
     hooks:
       - id: vulture
         args: [--min-confidence, "80", app/core/, app/api/]
 
-  # Detect-secrets - wykrywanie sekretów i haseł
+  # Detect-secrets - wykrywanie sekretow i hase
   # - repo: https://github.com/Yelp/detect-secrets
   #   rev: v1.5.0
   #   hooks:

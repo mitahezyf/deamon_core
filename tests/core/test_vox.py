@@ -82,7 +82,7 @@ def test_vox_initialization_device():
 
 def test_warmup_fails_without_load():
     vox = DaemonVox()
-    with pytest.raises(RuntimeError, match=r"Najpierw wywołaj DaemonVox.load\(\)"):
+    with pytest.raises(RuntimeError, match=r"Najpierw wywoaj DaemonVox.load\(\)"):
         vox.warmup()
 
 
@@ -152,7 +152,7 @@ def test_stream_chunks_returns_numpy_arrays(mocker, vox_fs):
     vox = DaemonVox()
     vox.load()
 
-    chunks = list(vox.stream_chunks("Witaj świecie"))
+    chunks = list(vox.stream_chunks("Witaj swiecie"))
 
     assert len(chunks) == 3
     assert all(isinstance(chunk, np.ndarray) for chunk in chunks)
@@ -182,7 +182,7 @@ def test_load_fails_when_no_voice_samples(mocker, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "cache_path", tmp_path / "voice_cache.pth")
 
     vox = DaemonVox()
-    with pytest.raises(FileNotFoundError, match="Brak plików .wav"):
+    with pytest.raises(FileNotFoundError, match="Brak plikow .wav"):
         vox.load()
 
 

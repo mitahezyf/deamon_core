@@ -46,12 +46,17 @@ data/
 logs/
 tmp/
 temp/
+*.log
+*.err
+*.tmp
+tmp_startup.*
 
 # --- Generated audio/cache outputs ---
 daemon_voice_cache.pth
 tests/daemon_out.wav
 tests/daemon_final.wav
 tests/infer_cli_basic.wav
+tests/gui_out.wav
 
 # --- Optional large model artifacts (keep placeholders like .gitkeep) ---
 *.onnx

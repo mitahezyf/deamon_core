@@ -24,7 +24,7 @@ torch.backends.cudnn.benchmark = True
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
-# --- Ścieżki projektu ---
+# --- Sciezki projektu ---
 PROJECT_DIR = Path(r"K:\DAEMON_PROJECT")
 SAMPLES_DIR = PROJECT_DIR / "voice_samples"
 CACHE_PATH = PROJECT_DIR / "daemon_voice_cache.pth"
@@ -49,7 +49,7 @@ SYNTH_PARAMS = dict(
 def zbierz_probki() -> list[str]:
     pliki = sorted(SAMPLES_DIR.glob("*.wav"))
     if not pliki:
-        raise FileNotFoundError(f"Brak plików .wav w {SAMPLES_DIR}")
+        raise FileNotFoundError(f"Brak plikow .wav w {SAMPLES_DIR}")
     log.info("Probki: %s", [p.name for p in pliki])
     return [str(p) for p in pliki]
 
@@ -102,7 +102,7 @@ def zaladuj_lub_zbuduj_cache(tts: TTS, probki: list[str]):
 
 
 def warmup(tts: TTS, gpt_cond_latent, speaker_embedding) -> None:
-    # Rozgrzewka CUDA - pierwsze wywołanie zawsze wolniejsze przez JIT kerneli
+    # Rozgrzewka CUDA - pierwsze wywoanie zawsze wolniejsze przez JIT kerneli
     log.info("Rozgrzewanie CUDA (warmup)...")
     model = tts.synthesizer.tts_model
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
@@ -153,7 +153,7 @@ def generuj(
 
 def obsluz_klienta(conn, tts, gpt_cond_latent, speaker_embedding):
     try:
-        # Format: 4 bajty długości JSON | JSON
+        # Format: 4 bajty dugosci JSON | JSON
         raw_len = conn.recv(4)
         if not raw_len:
             return
@@ -227,7 +227,7 @@ def main():
     gpt_cond_latent, speaker_embedding = zaladuj_lub_zbuduj_cache(tts, probki)
 
     if "--server" in args:
-        # Tryb serwera: warmup + nasłuchiwanie - model żyje przez cały czas = instant po starcie
+        # Tryb serwera: warmup + nasuchiwanie - model zyje przez cay czas = instant po starcie
         warmup(tts, gpt_cond_latent, speaker_embedding)
         tryb_serwer(tts, gpt_cond_latent, speaker_embedding)
     else:
@@ -236,8 +236,8 @@ def main():
             " ".join(args)
             if args
             else (
-                "Wodzu, system melduje pełną gotowość do startu InPost AirLines. "
-                "Barszcz sosnowskiego smakuje wybornie i właśnie się kończy gotować."
+                "Wodzu, system melduje pena gotowosc do startu InPost AirLines. "
+                "Barszcz sosnowskiego smakuje wybornie i wasnie sie konczy gotowac."
             )
         )
         tryb_jednorazowy(tts, gpt_cond_latent, speaker_embedding, text)

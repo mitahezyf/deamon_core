@@ -47,7 +47,7 @@ class _OpenWakeWordAdapter:
 
         kwargs: dict = {}
         # ONNX jest stabilniejszym wyborem na Windows, bo tflite-runtime
-        # często nie jest dostępny w tym środowisku.
+        # czesto nie jest dostepny w tym srodowisku.
         kwargs["inference_framework"] = "onnx"
 
         if not (model_path and model_path.exists()):
@@ -57,7 +57,7 @@ class _OpenWakeWordAdapter:
 
                 pretrained = openwakeword.get_pretrained_model_paths("onnx")
                 if any(not Path(path).exists() for path in pretrained):
-                    log.info("Brak zasobów openwakeword - pobieram modele domyślne...")
+                    log.info("Brak zasobow openwakeword - pobieram modele domyslne...")
                     download_models()
             except Exception as exc:  # pragma: no cover - zalezne od runtime/network
                 log.warning("Nie udalo sie przygotowac modeli openwakeword: %s", exc)

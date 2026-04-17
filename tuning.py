@@ -10,8 +10,8 @@ logging.basicConfig(
 )
 log = logging.getLogger("tuning")
 
-# Skrypt do ręcznego przebudowania cache embeddingów głosu
-# Użyj gdy dodasz nowe próbki do voice_samples/
+# Skrypt do recznego przebudowania cache embeddingow gosu
+# Uzyj gdy dodasz nowe probki do voice_samples/
 
 PROJECT_DIR = Path(r"K:\DAEMON_PROJECT")
 SAMPLES_DIR = PROJECT_DIR / "voice_samples"
@@ -21,10 +21,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 log.info("Ladowanie modelu na %s...", device)
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
 
-# Automatyczne zbieranie wszystkich próbek
+# Automatyczne zbieranie wszystkich probek
 probki = sorted(SAMPLES_DIR.glob("*.wav"))
 if not probki:
-    raise FileNotFoundError(f"Brak plików .wav w {SAMPLES_DIR}")
+    raise FileNotFoundError(f"Brak plikow .wav w {SAMPLES_DIR}")
 
 log.info("Znaleziono probki: %s", [p.name for p in probki])
 log.info("Obliczam embeddingi glosu ze wszystkich probek...")

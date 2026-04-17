@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
         settings.api_port,
     )
     yield
-    # sprzątanie przy wyłączeniu
+    # sprzatanie przy wyaczeniu
     log.info("Daemon zatrzymywany...")
     del app.state.stt
     del app.state.ears

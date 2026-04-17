@@ -121,7 +121,7 @@ def _resample_audio(
     if audio.size == 0:
         return audio
 
-    # Liniowy resampling jest wystarczający dla krótkich ramek live-mic.
+    # Liniowy resampling jest wystarczajacy dla krotkich ramek live-mic.
     target_size = max(
         1, int(round(audio.size * float(target_rate) / float(source_rate)))
     )

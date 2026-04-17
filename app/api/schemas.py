@@ -1,10 +1,10 @@
 from pydantic import BaseModel
 
-# --- żądania ---
+# --- zadania ---
 
 
 class SynthesizeRequest(BaseModel):
-    # żądanie syntezy mowy
+    # zadanie syntezy mowy
     text: str
     output: str = "daemon_out.wav"
 
@@ -32,7 +32,7 @@ class SynthesizeResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    # stan serwera i załadowanych modeli
+    # stan serwera i zaadowanych modeli
     status: str
     vox_loaded: bool
     ears_loaded: bool
