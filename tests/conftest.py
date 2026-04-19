@@ -64,7 +64,16 @@ def stt_mock(mocker):
 
 
 @pytest.fixture
-def test_client(vox_mock, ears_mock, stt_mock):
+def brain_mock(mocker):
+    mock_brain_class = mocker.patch("app.api.main.DaemonBrain", autospec=True)
+    mock_instance = mock_brain_class.return_value
+    mock_instance.is_loaded = True
+    mock_instance.reply.return_value = "testowa odpowiedz"
+    return mock_instance
+
+
+@pytest.fixture
+def test_client(vox_mock, ears_mock, stt_mock, brain_mock):
     """Klient HTTP/WS oparty o realny lifecycle aplikacji."""
     with TestClient(app) as client:
         yield client

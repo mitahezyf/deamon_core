@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes.http import router as http_router
 from app.api.routes.ui import router as ui_router
 from app.api.routes.ws import router as ws_router
+from app.core.brain import DaemonBrain
 from app.core.config import settings
 from app.core.ears import DaemonEars
 from app.core.logger import get_logger
@@ -41,6 +42,13 @@ async def lifespan(app: FastAPI):
         log.warning("STT load skipped: %s", exc)
     app.state.stt = stt
 
+    brain = DaemonBrain()
+    try:
+        brain.load()
+    except Exception as exc:
+        log.warning("Brain load skipped: %s", exc)
+    app.state.brain = brain
+
     log.info(
         "Daemon gotowy | LLM: %s | port: %d",
         settings.llm_model,
@@ -49,6 +57,7 @@ async def lifespan(app: FastAPI):
     yield
     # sprzatanie przy wyaczeniu
     log.info("Daemon zatrzymywany...")
+    del app.state.brain
     del app.state.stt
     del app.state.ears
     del app.state.vox

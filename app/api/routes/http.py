@@ -4,6 +4,8 @@ import torch
 from fastapi import APIRouter, HTTPException, Request
 
 from app.api.schemas import (
+    AssistantReplyRequest,
+    AssistantReplyResponse,
     HealthResponse,
     PublicConfigResponse,
     StatusResponse,
@@ -114,3 +116,21 @@ async def transcribe(req: TranscribeRequest, request: Request):
         ) from exc
     text = stt.transcribe_pcm16(audio_bytes, sample_rate=req.sample_rate)
     return TranscribeResponse(text=text, sample_rate=req.sample_rate)
+
+
+@router.post("/assistant/reply", response_model=AssistantReplyResponse)
+async def assistant_reply(req: AssistantReplyRequest, request: Request):
+    text = req.text.strip()
+    if not text:
+        return AssistantReplyResponse(reply="")
+
+    brain = request.app.state.brain
+    if not brain.is_loaded:
+        raise HTTPException(status_code=503, detail="LLM is not ready")
+
+    try:
+        reply = brain.reply(text)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return AssistantReplyResponse(reply=reply)

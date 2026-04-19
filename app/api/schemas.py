@@ -20,6 +20,14 @@ class TranscribeResponse(BaseModel):
     sample_rate: int
 
 
+class AssistantReplyRequest(BaseModel):
+    text: str
+
+
+class AssistantReplyResponse(BaseModel):
+    reply: str
+
+
 # --- odpowiedzi ---
 
 

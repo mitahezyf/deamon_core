@@ -43,6 +43,7 @@ let micProcessor = null;
 let micMutedGain = null;
 let micCapturing = false;
 let pttPressActive = false;
+let assistantThinking = false;
 
 function logLine(message, kind = "info") {
   const ts = new Date().toLocaleTimeString("pl-PL", { hour12: false });
@@ -159,6 +160,44 @@ function stopStream() {
   logLine("Streaming zatrzymany", "ok");
 }
 
+async function fetchAssistantReply(text) {
+  const response = await fetch("/assistant/reply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`LLM HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return (data.reply || "").trim();
+}
+
+async function runAssistantLoop(userText) {
+  const text = (userText || "").trim();
+  if (!text || assistantThinking) {
+    return;
+  }
+
+  assistantThinking = true;
+  try {
+    logLine("Asystent mysli...", "info");
+    const reply = await fetchAssistantReply(text);
+    if (!reply) {
+      logLine("Asystent zwrocil pusta odpowiedz", "info");
+      return;
+    }
+    logLine(`Asystent: ${reply}`, "ok");
+    streamViaWs(reply);
+  } catch (error) {
+    logLine(`LLM error: ${error.message}`, "error");
+  } finally {
+    assistantThinking = false;
+  }
+}
+
 function setMicButtons() {
   const isConnected = earsWs && earsWs.readyState === WebSocket.OPEN;
   els.connectMicBtn.disabled = isConnected;
@@ -248,6 +287,9 @@ function handleEarsEvent(data) {
     els.sttTranscript.value = data.text || "";
     if (data.text) {
       logLine(`STT: ${data.text}`, "ok");
+      if (data.final !== false) {
+        runAssistantLoop(data.text);
+      }
     } else {
       const reason = data.reject_reason || "unknown";
       logLine(`STT: (pusto) [powod: ${reason}]`, "info");
@@ -258,6 +300,7 @@ function handleEarsEvent(data) {
   }
 
   if (eventName === "capture_started") {
+    stopStream();
     micCapturing = true;
     setMicButtons();
     logLine(`Capture aktywny (${data.source || "unknown"})`, "ok");
@@ -371,8 +414,8 @@ function disconnectMic() {
   }
 }
 
-function streamViaWs() {
-  const text = els.textInput.value.trim();
+function streamViaWs(inputText = null) {
+  const text = (inputText ?? els.textInput.value).trim();
   if (!text) {
     logLine("Podaj tekst do streamingu", "error");
     return;

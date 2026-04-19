@@ -110,3 +110,25 @@ def test_transcribe_endpoint_returns_empty_when_stt_not_loaded(test_client, stt_
     response = test_client.post("/transcribe", json=payload)
     assert response.status_code == 200
     assert response.json()["text"] == ""
+
+
+def test_assistant_reply_endpoint_returns_reply(test_client, brain_mock):
+    response = test_client.post("/assistant/reply", json={"text": "Jak leci?"})
+    assert response.status_code == 200
+    assert response.json()["reply"] == "testowa odpowiedz"
+    brain_mock.reply.assert_called_once_with("Jak leci?")
+
+
+def test_assistant_reply_endpoint_returns_empty_for_blank_text(test_client, brain_mock):
+    response = test_client.post("/assistant/reply", json={"text": "   "})
+    assert response.status_code == 200
+    assert response.json()["reply"] == ""
+    brain_mock.reply.assert_not_called()
+
+
+def test_assistant_reply_endpoint_returns_503_when_llm_not_ready(
+    test_client, brain_mock
+):
+    brain_mock.is_loaded = False
+    response = test_client.post("/assistant/reply", json={"text": "test"})
+    assert response.status_code == 503
