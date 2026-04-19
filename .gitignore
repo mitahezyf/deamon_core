@@ -64,5 +64,9 @@ tests/gui_out.wav
 *.safetensors
 *.ckpt
 
+# --- Local model cache (kept in repo tree, not tracked) ---
+.model_store/*
+!.model_store/.gitkeep
+
 bin/
 markdown/

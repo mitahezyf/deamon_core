@@ -25,7 +25,9 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
 # --- Sciezki projektu ---
-PROJECT_DIR = Path(r"K:\DAEMON_PROJECT")
+# LEGACY ENTRYPOINT: utrzymywany wylacznie do zgodnosci wstecznej.
+# Glowny, wspierany runtime to app.api.main.
+PROJECT_DIR = Path(__file__).resolve().parent
 SAMPLES_DIR = PROJECT_DIR / "voice_samples"
 CACHE_PATH = PROJECT_DIR / "daemon_voice_cache.pth"
 OUTPUT_DIR = PROJECT_DIR / "tests"
@@ -215,6 +217,7 @@ def tryb_jednorazowy(tts, gpt_cond_latent, speaker_embedding, text: str):
 
 
 def main():
+    log.warning("Tryb legacy daemon_vox.py; preferowany start: python -m app.api.main")
     args = sys.argv[1:]
     probki = zbierz_probki()
     tts = zaladuj_model()

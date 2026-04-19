@@ -6,6 +6,7 @@ import numpy as np
 
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.core.model_paths import MODEL_PATHS
 
 log = get_logger("stt")
 _TARGET_SAMPLE_RATE = 16000
@@ -46,6 +47,7 @@ class DaemonStt:
             settings.whisper_model,
             device="cuda" if _cuda_available() else "cpu",
             compute_type=compute_type,
+            download_root=str(MODEL_PATHS["hf_home"]),
         )
         self._loaded = True
         log.info(

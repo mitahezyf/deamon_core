@@ -10,6 +10,7 @@ from TTS.api import TTS
 
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.core.model_paths import MODEL_PATHS
 
 # wycisza FutureWarning i UserWarning z zewnetrznych bibliotek (TTS, transformers)
 # to ich wewnetrzny deprecated kod i nie naprawiamy go po stronie aplikacji
@@ -158,6 +159,11 @@ class DaemonVox:
 
     def _zaladuj_model(self) -> TTS:
         log.info("adowanie modelu XTTS v2 na %s...", self._device)
+        log.info(
+            "Cache modeli TTS/HF: %s | %s",
+            MODEL_PATHS["tts_home"],
+            MODEL_PATHS["hf_home"],
+        )
         tts = TTS(settings.tts_model).to(self._device)
         model = tts.synthesizer.tts_model
         model.eval()

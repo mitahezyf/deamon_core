@@ -34,10 +34,17 @@ def test_load_enabled_initializes_model(monkeypatch):
     created = {}
 
     class FakeWhisperModel:
-        def __init__(self, model_name: str, device: str, compute_type: str) -> None:
+        def __init__(
+            self,
+            model_name: str,
+            device: str,
+            compute_type: str,
+            download_root: str,
+        ) -> None:
             created["model_name"] = model_name
             created["device"] = device
             created["compute_type"] = compute_type
+            created["download_root"] = download_root
 
     fake_module = types.SimpleNamespace(WhisperModel=FakeWhisperModel)
     monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
@@ -49,6 +56,7 @@ def test_load_enabled_initializes_model(monkeypatch):
     assert created["model_name"] == "tiny"
     assert created["device"] == "cpu"
     assert created["compute_type"] == "int8"
+    assert created["download_root"]
 
 
 def test_load_enabled_raises_when_package_missing(monkeypatch):

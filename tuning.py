@@ -10,10 +10,13 @@ logging.basicConfig(
 )
 log = logging.getLogger("tuning")
 
+# LEGACY TOOL: utrzymywany do zgodnosci wstecznej.
+# Preferowana sciezka produkcyjna to runtime app.api.main.
+
 # Skrypt do recznego przebudowania cache embeddingow gosu
 # Uzyj gdy dodasz nowe probki do voice_samples/
 
-PROJECT_DIR = Path(r"K:\DAEMON_PROJECT")
+PROJECT_DIR = Path(__file__).resolve().parent
 SAMPLES_DIR = PROJECT_DIR / "voice_samples"
 CACHE_PATH = PROJECT_DIR / "daemon_voice_cache.pth"
 
