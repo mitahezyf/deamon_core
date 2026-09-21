@@ -11,9 +11,7 @@ from app.api.routes.ui import router as ui_router
 from app.api.routes.ws import router as ws_router
 from app.core.brain import DaemonBrain
 from app.core.config import settings
-from app.core.ears import DaemonEars
 from app.core.logger import get_logger
-from app.core.stt import DaemonStt
 from app.core.vox import DaemonVox
 
 log = get_logger("api")
@@ -23,24 +21,10 @@ log = get_logger("api")
 async def lifespan(app: FastAPI):
     # laduje modele przy starcie, potem wszystko jest gotowe
     log.info("Daemon startuje (debug_mode=%s)...", settings.debug_mode)
+
     vox = DaemonVox()
     vox.load()
-    vox.warmup()
     app.state.vox = vox
-
-    ears = DaemonEars()
-    try:
-        ears.load()
-    except Exception as exc:
-        log.warning("Ears load skipped: %s", exc)
-    app.state.ears = ears
-
-    stt = DaemonStt()
-    try:
-        stt.load()
-    except Exception as exc:
-        log.warning("STT load skipped: %s", exc)
-    app.state.stt = stt
 
     brain = DaemonBrain()
     try:
@@ -55,19 +39,17 @@ async def lifespan(app: FastAPI):
         settings.api_port,
     )
     yield
-    # sprzatanie przy wyaczeniu
+    # sprzatanie przy wylaczeniu
     log.info("Daemon zatrzymywany...")
     del app.state.brain
-    del app.state.stt
-    del app.state.ears
     del app.state.vox
     log.info("Daemon zatrzymany.")
 
 
 app = FastAPI(
     title="Daemon API",
-    description="Lokalny asystent AI - backend WebSocket i REST",
-    version="0.1.0",
+    description="Lokalny asystent AI — backend WebSocket i REST (serwer LXC)",
+    version="0.2.0",
     lifespan=lifespan,
 )
 

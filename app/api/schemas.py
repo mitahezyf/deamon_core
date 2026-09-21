@@ -1,34 +1,24 @@
 from pydantic import BaseModel
 
-# --- zadania ---
+# =============================================================================
+# DAEMON Core — API Schemas (serwer LXC)
+# Schematy STT, Ears, WakeWord naleza do client_node_win/
+# =============================================================================
+
+# --- zadania REST ---
 
 
 class SynthesizeRequest(BaseModel):
-    # zadanie syntezy mowy
+    # zadanie syntezy mowy przez Piper TTS ONNX
     text: str
     output: str = "daemon_out.wav"
-
-
-class TranscribeRequest(BaseModel):
-    # surowe PCM16 mono zakodowane base64
-    audio_b64: str
-    sample_rate: int = 16000
-
-
-class TranscribeResponse(BaseModel):
-    text: str
-    sample_rate: int
 
 
 class AssistantReplyRequest(BaseModel):
     text: str
 
 
-class AssistantReplyResponse(BaseModel):
-    reply: str
-
-
-# --- odpowiedzi ---
+# --- odpowiedzi REST ---
 
 
 class SynthesizeResponse(BaseModel):
@@ -39,11 +29,14 @@ class SynthesizeResponse(BaseModel):
     output: str
 
 
+class AssistantReplyResponse(BaseModel):
+    reply: str
+
+
 class HealthResponse(BaseModel):
-    # stan serwera i zaadowanych modeli
+    # minimalny health check
     status: str
     vox_loaded: bool
-    ears_loaded: bool
     device: str
     llm_model: str
     api_port: int
@@ -52,34 +45,18 @@ class HealthResponse(BaseModel):
 class StatusResponse(BaseModel):
     status: str
     vox_loaded: bool
-    ears_loaded: bool
     device: str
     llm_model: str
     language: str
-    stt_enabled: bool
-    stt_loaded: bool
-    stt_sample_rate: int
-    wake_word_enabled: bool
-    wake_word_backend: str
-    wake_word_label: str
-    wake_word_threshold: float
     api_host: str
     api_port: int
+    mem_used_mb: int
+    mem_total_mb: int
 
 
 class PublicConfigResponse(BaseModel):
     llm_model: str
     ollama_url: str
     language: str
-    whisper_model: str
-    tts_model: str
-    stt_enabled: bool
-    stt_sample_rate: int
-    wake_word_enabled: bool
-    wake_word_backend: str
-    wake_word_label: str
-    wake_word_threshold: float
     api_host: str
     api_port: int
-    wake_word_model: str
-    openwakeword_model_path: str

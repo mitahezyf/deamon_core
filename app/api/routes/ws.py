@@ -3,62 +3,29 @@ import struct
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.core.audio_pipeline_v2 import EarsStreamSession
-from app.core.config import settings
 from app.core.logger import get_logger
 
 log = get_logger("api.ws")
 router = APIRouter()
 
-# format nagowka paczki WebSocket:
-# [4 bajty big-endian uint32: dugosc danych PCM] + [dane PCM float32]
-# pusty pakiet (dugosc=0) sygnalizuje koniec strumienia
+# format naglowka paczki WebSocket:
+# [4 bajty big-endian uint32: dlugosc danych PCM] + [dane PCM float32]
+# pusty pakiet (dlugosc=0) sygnalizuje koniec strumienia
 _HEADER_FMT = ">I"
 
-
-@router.websocket("/ws/ears/listen")
-async def ws_ears_listen(websocket: WebSocket):
-    await websocket.accept()
-    await websocket.send_json({"event": "ready", "message": "ears websocket ready"})
-    log.info("Nowe polaczenie ears WS: %s", websocket.client)
-    session = EarsStreamSession(
-        ears=websocket.app.state.ears,
-        stt=websocket.app.state.stt,
-        stt_enabled=settings.stt_enabled,
-    )
-
-    try:
-        while True:
-            message = await websocket.receive()
-
-            if message.get("type") == "websocket.disconnect":
-                raise WebSocketDisconnect
-
-            if message.get("bytes") is not None:
-                payload = message["bytes"]
-                for event in session.on_audio_bytes(payload):
-                    await websocket.send_json(event)
-                continue
-
-            text_payload = message.get("text")
-            if text_payload is None:
-                continue
-
-            for event in session.on_command(text_payload):
-                await websocket.send_json(event)
-    except WebSocketDisconnect:
-        log.info("Klient ears WS rozlaczyl sie: %s", websocket.client)
-    except Exception as exc:
-        log.error("Blad ears WS: %s", exc, exc_info=True)
-        await websocket.close(code=1011)
+# TODO (Etap 6): Zastapic ponizszy stub centralnym hubem /api/v1/ws/agent
+# zgodnym z pelnym protokolem z ai/03_PROTOCOLS_AND_STATE_MACHINE.md:
+#   - user_prompt, frame_response, abort_generation (C->S)
+#   - request_frame, exec_action, state_change, binary PCM (S->C)
 
 
 @router.websocket("/ws/synthesize")
 async def ws_synthesize(websocket: WebSocket):
-    # WebSocket endpoint do streamowania audio w czasie rzeczywistym
-    # klient wysya tekst, serwer odsya chunki PCM na biezaco bez czekania na caosc
+    # Tymczasowy WebSocket endpoint do streamowania audio w czasie rzeczywistym.
+    # Klient wysyla tekst, serwer odsyla chunki PCM na biezaco.
+    # STUB: Do zastapienia przez /api/v1/ws/agent w Etapie 6 roadmapy.
     await websocket.accept()
-    log.info("Nowe poaczenie WebSocket: %s", websocket.client)
+    log.info("Nowe polaczenie WebSocket (synthesize): %s", websocket.client)
     try:
         while True:
             text = await websocket.receive_text()
@@ -78,10 +45,11 @@ async def ws_synthesize(websocket: WebSocket):
 
             # sygnal konca strumienia - pusty pakiet z dlugoscia 0
             await websocket.send_bytes(struct.pack(_HEADER_FMT, 0))
-            log.debug("Strumien zakonczony, wysano %d chunkow", chunk_count)
+            log.debug("Strumien zakonczony, wyslano %d chunkow", chunk_count)
 
     except WebSocketDisconnect:
-        log.info("Klient WebSocket rozaczy sie: %s", websocket.client)
+        log.info("Klient WebSocket rozlaczyl sie: %s", websocket.client)
     except Exception as e:
-        log.error("Bad WebSocket: %s", e, exc_info=True)
+        log.error("Blad WebSocket: %s", e, exc_info=True)
         await websocket.close(code=1011)
+

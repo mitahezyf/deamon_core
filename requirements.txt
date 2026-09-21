@@ -1,4 +1,11 @@
-﻿# --- FastAPI & ASGI Server ---
+# =============================================================================
+# DAEMON Core — Server Dependencies (LXC Debian 12, CPU-only)
+# =============================================================================
+# ZAKAZ: Brak torch+CUDA, brak Coqui TTS, brak faster-whisper, brak openWakeWord.
+# Te biblioteki naleza WYLACZNIE do client_node_win/requirements_client.txt.
+# =============================================================================
+
+# --- FastAPI & ASGI Server ---
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
@@ -8,22 +15,16 @@ websockets>=12.0
 
 # --- Networking, Async & HTTP ---
 httpx>=0.27.0
-aiohttp>=3.9.0
-requests>=2.31.0
 python-dotenv>=1.0.0
 
-# --- Worker LLM Client (OpenAI spec pod Ollamę z RTX 3090) ---
+# --- LLM Client (OpenAI-compat spec → Ollama na RTX 3090) ---
 openai>=1.14.0
 
-# --- Voice Engine (Lekki Piper TTS na CPU) ---
+# --- Voice Engine: Piper TTS ONNX (CPU-only, brak CUDA) ---
 piper-tts>=1.2.0
-soundfile>=0.12.1
+onnxruntime>=1.17.0
 numpy>=1.26.0
-
-# --- Lekki PyTorch (Tylko CPU, bez CUDA - pod stare importy w http.py) ---
---extra-index-url https://download.pytorch.org/whl/cpu
-torch>=2.2.0
-torchaudio>=2.2.0
+soundfile>=0.12.1
 
 # --- Web UI & System Helpers ---
 jinja2>=3.1.3

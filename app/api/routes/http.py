@@ -1,6 +1,4 @@
-import base64
-
-import torch
+import psutil
 from fastapi import APIRouter, HTTPException, Request
 
 from app.api.schemas import (
@@ -11,8 +9,6 @@ from app.api.schemas import (
     StatusResponse,
     SynthesizeRequest,
     SynthesizeResponse,
-    TranscribeRequest,
-    TranscribeResponse,
 )
 from app.core.config import settings
 from app.core.logger import get_logger
@@ -23,25 +19,17 @@ router = APIRouter()
 
 def _build_runtime_status(request: Request) -> dict:
     vox = request.app.state.vox
-    ears = request.app.state.ears
-    stt = request.app.state.stt
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    mem = psutil.virtual_memory()
     return {
         "status": "ok",
-        "vox_loaded": vox._tts is not None,
-        "ears_loaded": ears.is_loaded,
-        "device": device,
+        "vox_loaded": vox.is_loaded,
+        "device": "cpu",
         "llm_model": settings.llm_model,
         "language": settings.language,
-        "stt_enabled": settings.stt_enabled,
-        "stt_loaded": stt.is_loaded,
-        "stt_sample_rate": settings.stt_sample_rate,
-        "wake_word_enabled": settings.wake_word_enabled,
-        "wake_word_backend": settings.wake_word_backend,
-        "wake_word_label": settings.wake_word_label,
-        "wake_word_threshold": settings.wake_word_threshold,
         "api_host": settings.api_host,
         "api_port": settings.api_port,
+        "mem_used_mb": round(mem.used / 1024 / 1024),
+        "mem_total_mb": round(mem.total / 1024 / 1024),
     }
 
 
@@ -57,7 +45,6 @@ async def health(request: Request):
     return HealthResponse(
         status=runtime["status"],
         vox_loaded=runtime["vox_loaded"],
-        ears_loaded=runtime["ears_loaded"],
         device=runtime["device"],
         llm_model=runtime["llm_model"],
         api_port=runtime["api_port"],
@@ -76,18 +63,8 @@ async def public_config():
         llm_model=settings.llm_model,
         ollama_url=settings.ollama_url,
         language=settings.language,
-        whisper_model=settings.whisper_model,
-        tts_model=settings.tts_model,
-        stt_enabled=settings.stt_enabled,
-        stt_sample_rate=settings.stt_sample_rate,
-        wake_word_enabled=settings.wake_word_enabled,
-        wake_word_backend=settings.wake_word_backend,
-        wake_word_label=settings.wake_word_label,
-        wake_word_threshold=settings.wake_word_threshold,
         api_host=settings.api_host,
         api_port=settings.api_port,
-        wake_word_model=str(settings.wake_word_model),
-        openwakeword_model_path=str(settings.openwakeword_model_path),
     )
 
 
@@ -100,22 +77,6 @@ async def synthesize(req: SynthesizeRequest, request: Request):
     result = vox.synthesize_to_file(req.text, output_path)
     log.info("POST /synthesize zakonczony | total=%.3fs", result["total_time"])
     return SynthesizeResponse(**result)
-
-
-@router.post("/transcribe", response_model=TranscribeResponse)
-async def transcribe(req: TranscribeRequest, request: Request):
-    stt = request.app.state.stt
-    if not stt.is_loaded:
-        return TranscribeResponse(text="", sample_rate=req.sample_rate)
-
-    try:
-        audio_bytes = base64.b64decode(req.audio_b64, validate=True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400, detail="Invalid audio_b64 payload"
-        ) from exc
-    text = stt.transcribe_pcm16(audio_bytes, sample_rate=req.sample_rate)
-    return TranscribeResponse(text=text, sample_rate=req.sample_rate)
 
 
 @router.post("/assistant/reply", response_model=AssistantReplyResponse)
@@ -134,3 +95,4 @@ async def assistant_reply(req: AssistantReplyRequest, request: Request):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return AssistantReplyResponse(reply=reply)
+
