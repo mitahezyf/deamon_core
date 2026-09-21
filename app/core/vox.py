@@ -6,7 +6,12 @@ from typing import Iterator
 import numpy as np
 import torch
 import torchaudio
-from TTS.api import TTS
+# from TTS.api import TTS
+try:
+    from TTS.api import TTS
+except ModuleNotFoundError:
+    TTS = None
+    
 
 from app.core.config import settings
 from app.core.logger import get_logger
@@ -52,10 +57,18 @@ class DaemonVox:
         self._device: str = "cuda" if torch.cuda.is_available() else "cpu"
         log.debug("DaemonVox zainicjalizowany, urzadzenie: %s", self._device)
 
+        if TTS is None:
+            log.warning("Coqui TTS nie jest zainstalowane. Aktywny silnik to Piper.")
+            return
+
     # --- publiczne API ---
 
     def load(self) -> None:
         # laduje model i cache glosu, wywolac raz przy starcie serwera
+        if TTS is None:
+            log.warning("Coqui TTS jest wyłączone (brak biblioteki). Pomijam ładowanie modelu XTTS.")
+            return
+
         log.info("adowanie silnika gosu...")
         self._tts = self._zaladuj_model()
         probki = self._zbierz_probki()
@@ -66,7 +79,9 @@ class DaemonVox:
 
     def warmup(self) -> None:
         # rozgrzewka CUDA, pierwsze wywolanie jest wolniejsze przez JIT kerneli
-        self._assert_loaded()
+        if self._tts is None:
+            log.info("Warmup pominiety - silnik XTTS niedostepny (tryb Piper).")
+            return
         log.info("Rozgrzewanie CUDA (warmup)...")
         model = self._tts.synthesizer.tts_model  # type: ignore[union-attr]
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
@@ -100,7 +115,9 @@ class DaemonVox:
     def stream_chunks(self, text: str) -> Iterator[np.ndarray]:
         # generator zwraca kolejne chunki PCM (numpy float32)
         # to pozwala odtwarzac audio zanim caly tekst zostanie wygenerowany
-        self._assert_loaded()
+        if self._tts is None:
+            log.warning("stream_chunks pominiety - silnik XTTS niedostepny (tryb Piper).")
+            return
         log.debug("Rozpoczynam synteze strumieniowa: %r", text[:60])
         model = self._tts.synthesizer.tts_model  # type: ignore[union-attr]
         chunk_count = 0
@@ -155,7 +172,7 @@ class DaemonVox:
 
     def _assert_loaded(self) -> None:
         if self._tts is None:
-            raise RuntimeError("Najpierw wywoaj DaemonVox.load()")
+            raise RuntimeError("Silnik XTTS nie jest zaladowany (TTS=None). Uzyj Piper TTS.")
 
     def _zaladuj_model(self) -> TTS:
         log.info("adowanie modelu XTTS v2 na %s...", self._device)

@@ -70,3 +70,8 @@ tests/gui_out.wav
 
 bin/
 markdown/
+
+ai/*
+docs/*
+
+.antigravity
