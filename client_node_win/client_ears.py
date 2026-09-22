@@ -25,11 +25,14 @@ try:
     import openwakeword
     from openwakeword.model import Model as OWWModel
     openwakeword.utils.download_models()
+    from silero_vad import load_silero_vad, VADIterator
 except ImportError:
     log = logging.getLogger("client.ears")
-    log.warning("Brak openwakeword / faster-whisper! Uruchom pip install -r requirements_win.txt")
+    log.warning("Brak openwakeword / faster-whisper / silero-vad! Uruchom pip install -r requirements_win.txt")
     OWWModel = None
     WhisperModel = None
+    load_silero_vad = None
+    VADIterator = None
 
 log = logging.getLogger("client.ears")
 
@@ -42,15 +45,21 @@ class ClientEars:
         self._stream = None
         self.wake_word_name = wake_word
         
-        if OWWModel and WhisperModel:
+        if OWWModel and WhisperModel and load_silero_vad:
             log.info("Ladowanie modelu openWakeWord...")
             self.oww_model = OWWModel(inference_framework="onnx")
             
+            log.info("Ladowanie modelu Silero VAD (ONNX CPU)...")
+            self.vad_model = load_silero_vad(onnx=True)
+            self.vad_iterator = VADIterator(self.vad_model, sampling_rate=16000, threshold=0.5, min_silence_duration_ms=700)
+            
+            self._stt_model_name = stt_model
             try:
                 log.info(f"Ladowanie faster-whisper ({stt_model} na {device})...")
                 self.stt_model = WhisperModel(stt_model, device=device, compute_type="float16")
+                _ = self.stt_model.transcribe(np.zeros(16000, dtype=np.float32), beam_size=1, language="pl")
             except Exception as e:
-                log.warning(f"Błąd inicjalizacji Whisper na {device}: {e}. Fallback na CPU (int8)...")
+                log.warning(f"Błąd inicjalizacji/testu Whisper na {device}: {e}. Fallback na CPU (int8)...")
                 self.stt_model = WhisperModel(stt_model, device="cpu", compute_type="int8")
                 
             log.info("ClientEars gotowy.")
@@ -112,12 +121,11 @@ class ClientEars:
                         log.info(f"WakeWord WYKRYTY! (score: {score:.2f})")
                         break
 
-            # Nagrywanie po aktywacji - prosty VAD (Voice Activity Detection)
+            # Nagrywanie po aktywacji - Silero VAD
             log.info("Nasluchiwanie komendy (mow teraz)...")
             command_audio = []
-            silence_chunks = 0
-            max_silence_chunks = int(1.2 * (self.sample_rate / self.chunk_size)) # 1.2 sekundy ciszy = koniec komendy
-            rms_threshold = 300 # prog ciszy
+            self.vad_iterator.reset_states()
+            speech_started = False
             
             while True:
                 chunk = await asyncio.to_thread(self._get_audio_chunk)
@@ -127,15 +135,19 @@ class ClientEars:
                 audio_data = np.frombuffer(chunk, dtype=np.int16)
                 command_audio.append(audio_data)
                 
-                # Obliczanie glosnosci
-                rms = np.sqrt(np.mean(audio_data.astype(np.float32)**2))
-                if rms < rms_threshold:
-                    silence_chunks += 1
-                else:
-                    silence_chunks = 0
-                    
-                if silence_chunks > max_silence_chunks:
-                    log.info("Koniec komendy (wykryto ciszę).")
+                audio_float32 = audio_data.astype(np.float32) / 32768.0
+                speech_dict = self.vad_iterator(audio_float32)
+                
+                if speech_dict:
+                    if 'start' in speech_dict:
+                        speech_started = True
+                    elif 'end' in speech_dict:
+                        log.info("Koniec komendy (wykryto ciszę przez Silero VAD).")
+                        break
+                        
+                # Timeout jesli przez 5s nic nie powiedziano
+                if not speech_started and len(command_audio) > (5.0 * self.sample_rate / self.chunk_size):
+                    log.info("Koniec komendy (brak mowy).")
                     break
                     
                 # Hard limit 15 sekund
@@ -150,8 +162,14 @@ class ClientEars:
             audio_float32 = full_audio.astype(np.float32) / 32768.0
             
             def transcribe():
-                segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl")
-                return " ".join([s.text for s in segments]).strip()
+                try:
+                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl")
+                    return " ".join([s.text for s in segments]).strip()
+                except Exception:
+                    # Natychmiastowy bezglosny fallback na CPU
+                    self.stt_model = WhisperModel(self._stt_model_name, device="cpu", compute_type="int8")
+                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl")
+                    return " ".join([s.text for s in segments]).strip()
                 
             command_text = await asyncio.to_thread(transcribe)
             log.info(f"STT Wynik: {command_text}")

@@ -1,0 +1,15 @@
+[Unit]
+Description=DAEMON API Server (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/deamon_core
+ExecStart=/opt/deamon_core/venv/bin/uvicorn app.api.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+Environment="PATH=/opt/deamon_core/venv/bin"
+
+[Install]
+WantedBy=multi-user.target
