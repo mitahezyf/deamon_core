@@ -37,9 +37,9 @@ async def lifespan(app: FastAPI):
     app.state.router = DaemonRouter()
 
     log.info(
-        "Daemon gotowy | LLM: %s | port: %d",
-        settings.llm_model,
-        settings.api_port,
+        "Daemon gotowy | LLM: %s | port: %s",
+        settings.model_brain,
+        settings.port,
     )
     yield
     # sprzatanie przy wylaczeniu
@@ -76,8 +76,8 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 if __name__ == "__main__":
     uvicorn.run(
         "app.api.main:app",
-        host=settings.api_host,
-        port=settings.api_port,
+        host=settings.host,
+        port=settings.port,
         reload=False,
         log_level="debug" if settings.debug_mode else "info",
     )

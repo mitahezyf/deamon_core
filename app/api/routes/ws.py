@@ -65,6 +65,28 @@ async def ws_agent(websocket: WebSocket):
                 await send_state("STANDBY", abort_ev.session_id)
                 continue
 
+            if event_type == "tts_request":
+                text_to_say = data.get("text", "")
+                session_id = data.get("session_id", "win_client")
+                if text_to_say:
+                    async def process_tts():
+                        try:
+                            await send_state("STREAMING_TTS", session_id)
+                            await send_state("SPEAKING", session_id)
+                            async def single_sentence_gen():
+                                yield text_to_say
+                            async for pcm_bytes in vox.stream_sentences(single_sentence_gen()):
+                                header = struct.pack(_HEADER_FMT, len(pcm_bytes))
+                                await websocket.send_bytes(header + pcm_bytes)
+                            await websocket.send_bytes(struct.pack(_HEADER_FMT, 0))
+                            await send_state("STANDBY", session_id)
+                        except Exception as e:
+                            log.error("Błąd podczas TTS_REQUEST: %s", e)
+                            await send_state("STANDBY", session_id)
+                    
+                    current_task = asyncio.create_task(process_tts())
+                continue
+
             if event_type == "user_prompt":
                 prompt_ev = UserPromptEvent.model_validate(data)
                 session_id = prompt_ev.session_id

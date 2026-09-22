@@ -7,6 +7,7 @@ import struct
 from client_mouth import ClientMouth
 from client_eyes import capture_screen_base64
 from client_ears import ClientEars
+from client_actions import ActionExecutor
 
 # Prosta konfiguracja logowania dla klienta Windows
 logging.basicConfig(
@@ -28,6 +29,7 @@ async def ws_loop():
     mouth.start()
     
     ears = ClientEars()
+    action_executor = ActionExecutor()
     
     while True:
         try:
@@ -51,6 +53,20 @@ async def ws_loop():
                                 "session_id": "win_client"
                             }))
                             
+                        log.info(f"Otrzymano tekst z mikrofonu: {text}")
+                        # Weryfikacja przez lokalny Action Matrix
+                        was_handled, tts_text = await asyncio.to_thread(action_executor.execute, text)
+                        
+                        if was_handled:
+                            log.info(f"Akcja wykonana lokalnie. Oczekiwany TTS: {tts_text}")
+                            # Pomin LLM, zapytaj serwer wylacznie o szybki TTS
+                            await ws.send(json.dumps({
+                                "event_type": "tts_request",
+                                "text": tts_text,
+                                "session_id": "win_client"
+                            }))
+                            continue
+
                         payload = {
                             "event_type": "user_prompt",
                             "text": text,

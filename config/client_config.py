@@ -24,3 +24,5 @@ class ClientSettings:
     whisper_model_name: str = os.getenv("WHISPER_MODEL_NAME", "small")
     whisper_device: str = os.getenv("WHISPER_DEVICE", "cuda")
     whisper_compute_type: str = os.getenv("WHISPER_COMPUTE_TYPE", "float16")
+    daemon_ollama_host: str = os.getenv("DAEMON_OLLAMA_HOST", "http://192.168.0.215:11434")
+    model_router: str = os.getenv("DAEMON_MODEL_ROUTER", "huihui_ai/qwen3.5-abliterated:0.8b")

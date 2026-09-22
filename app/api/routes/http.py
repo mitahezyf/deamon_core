@@ -24,10 +24,10 @@ def _build_runtime_status(request: Request) -> dict:
         "status": "ok",
         "vox_loaded": vox.is_loaded,
         "device": "cpu",
-        "llm_model": settings.llm_model,
+        "llm_model": settings.model_brain,
         "language": settings.language,
-        "api_host": settings.api_host,
-        "api_port": settings.api_port,
+        "api_host": settings.host,
+        "api_port": settings.port,
         "mem_used_mb": round(mem.used / 1024 / 1024),
         "mem_total_mb": round(mem.total / 1024 / 1024),
     }
@@ -60,11 +60,11 @@ async def status(request: Request):
 @router.get("/config/public", response_model=PublicConfigResponse)
 async def public_config():
     return PublicConfigResponse(
-        llm_model=settings.llm_model,
-        ollama_url=settings.ollama_url,
+        llm_model=settings.model_brain,
+        ollama_url=settings.ollama_host,
         language=settings.language,
-        api_host=settings.api_host,
-        api_port=settings.api_port,
+        api_host=settings.host,
+        api_port=settings.port,
     )
 
 
