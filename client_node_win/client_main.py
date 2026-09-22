@@ -1,3 +1,20 @@
+import os
+import sys
+from pathlib import Path
+
+# Bezwzględnie na samym początku przed jakimkolwiek importem ctranslate2 / faster_whisper / torch:
+if sys.platform == "win32":
+    site_packages = Path(sys.prefix) / "Lib" / "site-packages"
+    cublas_bin = site_packages / "nvidia" / "cublas" / "bin"
+    cudnn_bin = site_packages / "nvidia" / "cudnn" / "bin"
+    for p in [cublas_bin, cudnn_bin]:
+        if p.exists():
+            try:
+                os.add_dll_directory(str(p))
+            except Exception:
+                pass
+            os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+
 import asyncio
 import websockets
 import json

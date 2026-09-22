@@ -93,9 +93,24 @@ class DaemonBrain:
         }
         
         url = f"{server_settings.ollama_host}/api/chat"
-        ttft_timeout = getattr(server_settings, "brain_ttft_timeout", 15.0)
+        probe_url = f"{server_settings.ollama_host}/api/tags"
+
+        # Asynchroniczny probe diagnostyczny GET /api/tags z timeoutem 2s
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as probe_client:
+                probe_res = await probe_client.get(probe_url)
+                if probe_res.status_code == 200:
+                    tags_data = probe_res.json()
+                    models_list = [m.get("name") for m in tags_data.get("models", [])]
+                    log.info("Brain probe [OK]: Ollama aktywna na %s. Dostępne modele: %s", probe_url, models_list)
+                else:
+                    log.warning("Brain probe: Ollama zwróciła status %s na %s", probe_res.status_code, probe_url)
+        except Exception as probe_err:
+            log.warning("Brain probe: Brak bezpośredniej odpowiedzi z Ollamy na %s (%s)", probe_url, probe_err)
+
+        ttft_timeout = getattr(server_settings, "brain_ttft_timeout", 60.0)
         timeout_cfg = httpx.Timeout(
-            timeout=120.0,
+            timeout=180.0,
             connect=5.0,
             read=ttft_timeout,
             write=10.0,

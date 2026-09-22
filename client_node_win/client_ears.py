@@ -1,3 +1,20 @@
+import os
+import sys
+from pathlib import Path
+
+# Bezwzględnie na samym początku przed jakimkolwiek importem ctranslate2 / faster_whisper / torch:
+if sys.platform == "win32":
+    site_packages = Path(sys.prefix) / "Lib" / "site-packages"
+    cublas_bin = site_packages / "nvidia" / "cublas" / "bin"
+    cudnn_bin = site_packages / "nvidia" / "cudnn" / "bin"
+    for p in [cublas_bin, cudnn_bin]:
+        if p.exists():
+            try:
+                os.add_dll_directory(str(p))
+            except Exception:
+                pass
+            os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+
 import asyncio
 import logging
 import queue
@@ -5,44 +22,7 @@ import threading
 import numpy as np
 import sounddevice as sd
 
-import os
-import sys
-from pathlib import Path
-import logging
-
 log = logging.getLogger("client.ears")
-
-# Dynamiczne ładowanie bibliotek NVIDIA CUDA (CTranslate2 / faster-whisper) na Windows
-if sys.platform == "win32":
-    prefix_path = Path(sys.prefix)
-    candidate_dirs = [
-        prefix_path / "Lib" / "site-packages" / "nvidia" / "cublas" / "bin",
-        prefix_path / "Lib" / "site-packages" / "nvidia" / "cudnn" / "bin",
-    ]
-    # Dodatkowe sprawdzenie standardowych lokalizacji site-packages
-    try:
-        import site
-        for sp in site.getsitepackages():
-            sp_path = Path(sp)
-            candidate_dirs.append(sp_path / "nvidia" / "cublas" / "bin")
-            candidate_dirs.append(sp_path / "nvidia" / "cudnn" / "bin")
-    except Exception:
-        pass
-
-    loaded_dirs = []
-    for dll_dir in candidate_dirs:
-        if dll_dir.is_dir() and str(dll_dir) not in loaded_dirs:
-            try:
-                os.add_dll_directory(str(dll_dir))
-                os.environ["PATH"] = str(dll_dir) + os.pathsep + os.environ.get("PATH", "")
-                loaded_dirs.append(str(dll_dir))
-            except Exception as e:
-                log.warning("Błąd podczas rejestrowania katalogu DLL %s: %s", dll_dir, e)
-
-    if loaded_dirs:
-        log.info("Biblioteki NVIDIA CUDA z venv_win zostały pomyślnie załadowane do przestrzeni procesu: %s", loaded_dirs)
-    else:
-        log.warning("Nie znaleziono katalogów NVIDIA CUDA (cublas/cudnn bin) w %s", prefix_path)
 
 try:
     from faster_whisper import WhisperModel
