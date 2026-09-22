@@ -13,33 +13,29 @@ class DaemonSettings(BaseSettings):
         extra="ignore",
     )
 
-    # --- LLM ---
-    # URL Ollamy na stacji Windows (RTX 3090)
-    llm_model: str = "qwen2.5:14b-instruct"
-    ollama_url: str = "http://192.168.0.100:11434"
+    # --- Modele LLM / VLM (Ollama na Windows + RTX 3090) ---
+    llm_model: str = "huihui_ai/qwen3.5-abliterated:9b"
+    router_model: str = "huihui_ai/qwen3.5-abliterated:0.8b"
+    ollama_url: str = "http://192.168.0.215:11434"
 
     # --- TTS (Piper ONNX CPU) ---
     language: str = "pl"
 
-    # --- Sciezki ---
-    # project_dir jest auto-wykrywany z lokalizacji tego pliku
+    # --- Sciezki bazowe ---
     project_dir: Path = Path(__file__).parent.parent.parent
     piper_model_path: Optional[Path] = None
     piper_config_path: Optional[Path] = None
     output_dir: Optional[Path] = None
 
     # --- Serwer API ---
-    # 0.0.0.0 = dostepny w sieci LAN dla innych urzadzen
-    api_host: str = "0.0.0.0"  # nosec B104 - celowe nasluchiwanie LAN dla web GUI
+    api_host: str = "0.0.0.0"  # nosec B104 - nasluchiwanie w sieci LAN
     api_port: int = 8000
 
-    # --- Tryb debugowania ---
-    # DAEMON_DEBUG_MODE=true w .env wlacza logi DEBUG we wszystkich modulach
+    # --- Debugowanie ---
     debug_mode: bool = False
 
     @model_validator(mode="after")
     def _ustaw_domyslne_sciezki(self) -> "DaemonSettings":
-        # ustawia sciezki pochodne od project_dir jesli nie podano w .env
         if self.piper_model_path is None:
             self.piper_model_path = (
                 self.project_dir / "models" / "piper" / "pl_PL-darkman-medium.onnx"
@@ -53,6 +49,5 @@ class DaemonSettings(BaseSettings):
         return self
 
 
-# singleton - importowany przez wszystkie moduly
+# Singleton importowany przez reszte modulow serwera
 settings = DaemonSettings()
-
