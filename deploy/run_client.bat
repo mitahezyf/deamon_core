@@ -3,11 +3,14 @@ echo =========================================
 echo DAEMON Klient - Start (Windows 11)
 echo =========================================
 
+:: Ustawienie adresu nasluchu sieciowego dla Ollamy na 0.0.0.0:11434 (dostep z LAN i serwera LXC)
+set "OLLAMA_HOST=0.0.0.0:11434"
+
 echo Sprawdzanie procesu Ollamy...
 tasklist /FI "IMAGENAME eq ollama.exe" 2>NUL | find /I /N "ollama.exe">NUL
 if "%ERRORLEVEL%"=="1" (
-    echo [OSTRZEZENIE] Proces ollama.exe nie dziala. Uruchamiam Ollame...
-    start "" "ollama" app
+    echo [OSTRZEZENIE] Proces ollama.exe nie dziala. Uruchamiam Ollame z nasluchem na %OLLAMA_HOST%...
+    start "" "ollama" serve
     timeout /t 5 /nobreak
 ) else (
     echo [OK] Ollama dziala w tle.

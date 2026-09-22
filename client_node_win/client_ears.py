@@ -7,19 +7,42 @@ import sounddevice as sd
 
 import os
 import sys
+from pathlib import Path
+import logging
 
-# Dynamiczne ladowanie DLL dla CUDA (CTranslate2 / faster-whisper) na Windows
-if os.name == 'nt':
+log = logging.getLogger("client.ears")
+
+# Dynamiczne ładowanie bibliotek NVIDIA CUDA (CTranslate2 / faster-whisper) na Windows
+if sys.platform == "win32":
+    prefix_path = Path(sys.prefix)
+    candidate_dirs = [
+        prefix_path / "Lib" / "site-packages" / "nvidia" / "cublas" / "bin",
+        prefix_path / "Lib" / "site-packages" / "nvidia" / "cudnn" / "bin",
+    ]
+    # Dodatkowe sprawdzenie standardowych lokalizacji site-packages
     try:
         import site
-        # Zaleznosci moga byc w bin lub lib
-        for sp in site.getsitepackages() + [site.getusersitepackages()]:
-            for pkg in ["nvidia\\cublas\\bin", "nvidia\\cublas\\lib", "nvidia\\cudnn\\bin", "nvidia\\cudnn\\lib"]:
-                dll_path = os.path.join(sp, pkg)
-                if os.path.exists(dll_path):
-                    os.add_dll_directory(dll_path)
+        for sp in site.getsitepackages():
+            sp_path = Path(sp)
+            candidate_dirs.append(sp_path / "nvidia" / "cublas" / "bin")
+            candidate_dirs.append(sp_path / "nvidia" / "cudnn" / "bin")
     except Exception:
         pass
+
+    loaded_dirs = []
+    for dll_dir in candidate_dirs:
+        if dll_dir.is_dir() and str(dll_dir) not in loaded_dirs:
+            try:
+                os.add_dll_directory(str(dll_dir))
+                os.environ["PATH"] = str(dll_dir) + os.pathsep + os.environ.get("PATH", "")
+                loaded_dirs.append(str(dll_dir))
+            except Exception as e:
+                log.warning("Błąd podczas rejestrowania katalogu DLL %s: %s", dll_dir, e)
+
+    if loaded_dirs:
+        log.info("Biblioteki NVIDIA CUDA z venv_win zostały pomyślnie załadowane do przestrzeni procesu: %s", loaded_dirs)
+    else:
+        log.warning("Nie znaleziono katalogów NVIDIA CUDA (cublas/cudnn bin) w %s", prefix_path)
 
 try:
     from faster_whisper import WhisperModel
@@ -28,14 +51,11 @@ try:
     openwakeword.utils.download_models()
     from silero_vad import load_silero_vad, VADIterator
 except ImportError:
-    log = logging.getLogger("client.ears")
     log.warning("Brak openwakeword / faster-whisper / silero-vad! Uruchom pip install -r requirements_win.txt")
     OWWModel = None
     WhisperModel = None
     load_silero_vad = None
     VADIterator = None
-
-log = logging.getLogger("client.ears")
 
 class ClientEars:
     def __init__(self):
