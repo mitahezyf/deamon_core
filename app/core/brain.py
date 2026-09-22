@@ -2,6 +2,7 @@ from typing import AsyncIterator, Optional
 import re
 import httpx
 import json
+import asyncio
 
 from config import server_settings
 from app.core.logger import get_logger
@@ -87,14 +88,23 @@ class DaemonBrain:
             "options": {
                 "temperature": 0.3,
                 "top_p": 0.9
-            }
+            },
+            "keep_alive": "15m"
         }
         
         url = f"{server_settings.ollama_host}/api/chat"
+        ttft_timeout = getattr(server_settings, "brain_ttft_timeout", 15.0)
+        timeout_cfg = httpx.Timeout(
+            timeout=120.0,
+            connect=5.0,
+            read=ttft_timeout,
+            write=10.0,
+            pool=5.0
+        )
         
         try:
-            async with httpx.AsyncClient() as client:
-                async with client.stream("POST", url, json=payload, timeout=None) as response:
+            async with httpx.AsyncClient(timeout=timeout_cfg) as client:
+                async with client.stream("POST", url, json=payload) as response:
                     response.raise_for_status()
                     full_text = ""
                     buffer = ""
@@ -141,6 +151,15 @@ class DaemonBrain:
                             log.error("Nieoczekiwany blad przetwarzania chunka w brain.py: %s", e, exc_info=True)
                                 
                     log.info(f"[DAEMON BRAIN ODPOWIEDŹ]: {full_text}")
+        except asyncio.CancelledError:
+            log.info("Brain: Generowanie przerwane (barge-in / Cancelled).")
+            raise
+        except httpx.TimeoutException:
+            log.warning("Brain: Timeout TTFT (%ss) przy zapytaniu do Ollamy.", ttft_timeout)
+            yield "Przepraszam, model nie odpowiedział w wyznaczonym czasie."
+        except httpx.ConnectError as e:
+            log.error("Brain: Błąd połączenia z Ollamą: %s", e)
+            yield "Przepraszam, brak połączenia z serwerem Ollama."
         except Exception as exc:
             log.error("LLM streaming failed: %s", exc, exc_info=True)
             yield "Przepraszam, wystąpił błąd generatora LLM."

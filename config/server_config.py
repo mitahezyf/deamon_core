@@ -20,6 +20,9 @@ class ServerSettings(BaseSettings):
     model_brain: str = "huihui_ai/qwen3.5-abliterated:9b"
     model_router: str = "huihui_ai/qwen3.5-abliterated:0.8b"
 
+    router_timeout: float = 3.0
+    brain_ttft_timeout: float = 15.0
+
     language: str = "pl"
     
     piper_model_path: Optional[Path] = None

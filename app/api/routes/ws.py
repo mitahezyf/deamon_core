@@ -2,6 +2,7 @@ import struct
 import asyncio
 import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from app.api.schemas import (
     UserPromptEvent, FrameResponseEvent, AbortGenerationEvent,
@@ -20,6 +21,30 @@ router = APIRouter()
 _HEADER_FMT = ">I"
 
 
+async def safe_send_text(ws: WebSocket, text: str) -> bool:
+    """Bezpieczne wysyłanie ramek tekstowych z weryfikacją stanu połączenia."""
+    if ws.client_state == WebSocketState.CONNECTED:
+        try:
+            await ws.send_text(text)
+            return True
+        except (RuntimeError, WebSocketDisconnect):
+            log.debug("Niepowodzenie wysłania tekstu - gniazdo zostało zamknięte.")
+            return False
+    return False
+
+
+async def safe_send_bytes(ws: WebSocket, data: bytes) -> bool:
+    """Bezpieczne wysyłanie ramek binarnych z weryfikacją stanu połączenia."""
+    if ws.client_state == WebSocketState.CONNECTED:
+        try:
+            await ws.send_bytes(data)
+            return True
+        except (RuntimeError, WebSocketDisconnect):
+            log.debug("Niepowodzenie wysłania bajtów - gniazdo zostało zamknięte.")
+            return False
+    return False
+
+
 @router.websocket("/api/v1/ws/agent")
 async def ws_agent(websocket: WebSocket):
     await websocket.accept()
@@ -36,8 +61,9 @@ async def ws_agent(websocket: WebSocket):
         router_svc = DaemonRouter()
 
     async def send_state(state: str, session_id: str):
-        event = StateChangeEvent(new_state=state, session_id=session_id)
-        await websocket.send_text(event.model_dump_json())
+        if websocket.client_state == WebSocketState.CONNECTED:
+            event = StateChangeEvent(new_state=state, session_id=session_id)
+            await safe_send_text(websocket, event.model_dump_json())
 
     # Na starcie STANDBY
     await send_state("STANDBY", "init")
@@ -69,6 +95,9 @@ async def ws_agent(websocket: WebSocket):
                 text_to_say = data.get("text", "")
                 session_id = data.get("session_id", "win_client")
                 if text_to_say:
+                    if current_task and not current_task.done():
+                        current_task.cancel()
+
                     async def process_tts():
                         try:
                             await send_state("STREAMING_TTS", session_id)
@@ -76,10 +105,15 @@ async def ws_agent(websocket: WebSocket):
                             async def single_sentence_gen():
                                 yield text_to_say
                             async for pcm_bytes in vox.stream_sentences(single_sentence_gen()):
+                                if websocket.client_state != WebSocketState.CONNECTED:
+                                    break
                                 header = struct.pack(_HEADER_FMT, len(pcm_bytes))
-                                await websocket.send_bytes(header + pcm_bytes)
-                            await websocket.send_bytes(struct.pack(_HEADER_FMT, 0))
+                                if not await safe_send_bytes(websocket, header + pcm_bytes):
+                                    break
+                            await safe_send_bytes(websocket, struct.pack(_HEADER_FMT, 0))
                             await send_state("STANDBY", session_id)
+                        except (asyncio.CancelledError, WebSocketDisconnect):
+                            log.info("Zadanie TTS_REQUEST przerwane (barge-in / disconnect).")
                         except Exception as e:
                             log.error("Błąd podczas TTS_REQUEST: %s", e)
                             await send_state("STANDBY", session_id)
@@ -103,19 +137,22 @@ async def ws_agent(websocket: WebSocket):
                         async def quick_reply_and_execute(reply_text: str, action: str = None, payload: dict = None):
                             if action:
                                 exec_ev = ExecActionEvent(action=action, payload=payload, session_id=session_id)
-                                await websocket.send_text(exec_ev.model_dump_json())
+                                await safe_send_text(websocket, exec_ev.model_dump_json())
                             
                             await send_state("STREAMING_TTS", session_id)
-                            await websocket.send_text(AssistantTextEvent(text=reply_text, session_id=session_id).model_dump_json())
+                            await safe_send_text(websocket, AssistantTextEvent(text=reply_text, session_id=session_id).model_dump_json())
                             await send_state("SPEAKING", session_id)
                             
                             async def single_sentence_gen():
                                 yield reply_text
                                 
                             async for pcm_bytes in vox.stream_sentences(single_sentence_gen()):
+                                if websocket.client_state != WebSocketState.CONNECTED:
+                                    break
                                 header = struct.pack(_HEADER_FMT, len(pcm_bytes))
-                                await websocket.send_bytes(header + pcm_bytes)
-                            await websocket.send_bytes(struct.pack(_HEADER_FMT, 0))
+                                if not await safe_send_bytes(websocket, header + pcm_bytes):
+                                    break
+                            await safe_send_bytes(websocket, struct.pack(_HEADER_FMT, 0))
                             await send_state("STANDBY", session_id)
                             
                         if isinstance(intent, VolumeControlIntent):
@@ -131,7 +168,7 @@ async def ws_agent(websocket: WebSocket):
                         image_b64 = None
                         if isinstance(intent, VisionQueryIntent):
                             req_ev = RequestFrameEvent(session_id=session_id)
-                            await websocket.send_text(req_ev.model_dump_json())
+                            await safe_send_text(websocket, req_ev.model_dump_json())
                             
                             # Czekamy na klatke (z krotkim timeoutem)
                             try:
@@ -152,33 +189,44 @@ async def ws_agent(websocket: WebSocket):
                         from app.core.brain import SentenceBuffer
                         async def sentence_generator():
                             sb = SentenceBuffer(min_length=15)
-                            async for token in text_stream:
-                                sentences = sb.add(token)
-                                for sentence in sentences:
-                                    await websocket.send_text(AssistantTextEvent(text=sentence, session_id=session_id).model_dump_json())
-                                    yield sentence
-                            remainder = sb.flush()
-                            if remainder:
-                                await websocket.send_text(AssistantTextEvent(text=remainder, session_id=session_id).model_dump_json())
-                                yield remainder
+                            try:
+                                async for token in text_stream:
+                                    if websocket.client_state != WebSocketState.CONNECTED:
+                                        break
+                                    sentences = sb.add(token)
+                                    for sentence in sentences:
+                                        if not await safe_send_text(websocket, AssistantTextEvent(text=sentence, session_id=session_id).model_dump_json()):
+                                            return
+                                        yield sentence
+                                remainder = sb.flush()
+                                if remainder and websocket.client_state == WebSocketState.CONNECTED:
+                                    await safe_send_text(websocket, AssistantTextEvent(text=remainder, session_id=session_id).model_dump_json())
+                                    yield remainder
+                            except (asyncio.CancelledError, WebSocketDisconnect):
+                                log.info("sentence_generator przerwany (barge-in / disconnect).")
+                                raise
 
                         await send_state("STREAMING_TTS", session_id)
                         
                         chunk_count = 0
                         # Piper TTS zwraca wygenerowane binarne chunki audio (PCM 16-bit) z otrzymywanych zdan
                         async for pcm_bytes in vox.stream_sentences(sentence_generator()):
+                            if websocket.client_state != WebSocketState.CONNECTED:
+                                log.info("Klient rozłączony podczas stream_sentences, przerywanie TTS.")
+                                break
                             if chunk_count == 0:
                                 await send_state("SPEAKING", session_id)
                             header = struct.pack(_HEADER_FMT, len(pcm_bytes))
-                            await websocket.send_bytes(header + pcm_bytes)
+                            if not await safe_send_bytes(websocket, header + pcm_bytes):
+                                break
                             chunk_count += 1
                             
                         # Koniec strumienia (pusty chunk)
-                        await websocket.send_bytes(struct.pack(_HEADER_FMT, 0))
+                        await safe_send_bytes(websocket, struct.pack(_HEADER_FMT, 0))
                         await send_state("STANDBY", session_id)
 
-                    except asyncio.CancelledError:
-                        log.info("Zadanie przerwane (Cancelled).")
+                    except (asyncio.CancelledError, WebSocketDisconnect):
+                        log.info("Zadanie przetwarzania promptu przerwane (barge-in / disconnect).")
                     except Exception as e:
                         log.error("Błąd w trakcie przetwarzania: %s", e, exc_info=True)
                         await send_state("STANDBY", session_id)
@@ -189,4 +237,7 @@ async def ws_agent(websocket: WebSocket):
         log.info("Klient WS rozłączony.")
     except Exception as e:
         log.error("Krytyczny błąd WS: %s", e, exc_info=True)
-
+    finally:
+        if current_task and not current_task.done():
+            current_task.cancel()
+            log.info("Anulowano aktywne zadanie po zamknięciu WebSocket.")

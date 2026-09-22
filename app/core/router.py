@@ -21,10 +21,10 @@ class DaemonRouter:
     Oparto o maly LLM (np. qwen2.5:0.5b).
     """
 
-    def __init__(self):
+    def __init__(self, timeout: Optional[float] = None):
         # Odpytujemy natywne API Ollamy
         self.ollama_url = f"{server_settings.ollama_host}/api/chat"
-        self.timeout = 1.2  # Zmniejszony timeout na 1.2s
+        self.timeout = timeout if timeout is not None else getattr(server_settings, "router_timeout", 3.0)
 
         self._adapter = TypeAdapter(IntentDecision)
 
@@ -75,11 +75,13 @@ class DaemonRouter:
             ],
             "options": {"temperature": 0.0, "num_predict": 32},
             "format": "json",
-            "stream": False
+            "stream": False,
+            "keep_alive": "15m"
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            timeout_cfg = httpx.Timeout(self.timeout, connect=min(2.0, self.timeout))
+            async with httpx.AsyncClient(timeout=timeout_cfg) as client:
                 response = await client.post(self.ollama_url, json=payload)
                 response.raise_for_status()
                 
@@ -98,7 +100,9 @@ class DaemonRouter:
                 return intent
 
         except httpx.TimeoutException:
-            log.warning("Router: Timeout %ss. Fallback do LLM_QUERY.", self.timeout)
+            log.warning("Router: Timeout %ss przy odpytywaniu Ollamy. Fallback do LLM_QUERY.", self.timeout)
+        except httpx.ConnectError as e:
+            log.warning("Router: Brak połączenia z Ollamą (%s). Fallback do LLM_QUERY.", e)
         except httpx.HTTPError as e:
             log.error("Router: Blad HTTP: %s. Fallback do LLM_QUERY.", e)
         except Exception as e:
