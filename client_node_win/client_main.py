@@ -96,6 +96,7 @@ async def ws_loop():
                             
                             if length == 0:
                                 log.debug("Koniec strumienia audio.")
+                                mouth.finish_stream()
                             else:
                                 pcm_data = msg[4:]
                                 mouth.play_chunk(pcm_data)
