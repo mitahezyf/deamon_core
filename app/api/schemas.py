@@ -89,22 +89,30 @@ class AssistantTextEvent(BaseModel):
 
 # --- INTENT ROUTER (Decyzje) ---
 
-class SystemCommandIntent(BaseModel):
-    intent_type: Literal["SystemCommand"] = "SystemCommand"
-    action: Literal["volume_up", "volume_down", "pause", "resume", "mute", "unmute"] = Field(
-        description="Akcja systemowa do wykonania na urządzeniu klienckim."
+class VolumeControlIntent(BaseModel):
+    intent_type: Literal["VOLUME_CONTROL"] = "VOLUME_CONTROL"
+    action: Literal["volume_up", "volume_down", "mute", "unmute"] = Field(
+        description="Akcja regulacji głośności."
     )
 
+class AppControlIntent(BaseModel):
+    intent_type: Literal["APP_CONTROL"] = "APP_CONTROL"
+    app_name: str = Field(description="Nazwa aplikacji do uruchomienia/obsłużenia.")
+
+class SystemStatusIntent(BaseModel):
+    intent_type: Literal["SYSTEM_STATUS"] = "SYSTEM_STATUS"
+    query: str = Field(description="Oryginalne zapytanie o status (bateria, godzina itp).")
+
 class VisionQueryIntent(BaseModel):
-    intent_type: Literal["VisionQuery"] = "VisionQuery"
+    intent_type: Literal["VISION_QUERY"] = "VISION_QUERY"
     query: str = Field(description="Oryginalne zapytanie użytkownika wymagające spojrzenia na ekran.")
 
 class LLMQueryIntent(BaseModel):
-    intent_type: Literal["LLMQuery"] = "LLMQuery"
+    intent_type: Literal["LLM_QUERY"] = "LLM_QUERY"
     query: str = Field(description="Oryginalne zapytanie użytkownika przeznaczone dla LLM (rozmowa, wiedza).")
 
 # Dyskryminowana unia IntentDecision
 IntentDecision = Annotated[
-    Union[SystemCommandIntent, VisionQueryIntent, LLMQueryIntent],
+    Union[VolumeControlIntent, AppControlIntent, SystemStatusIntent, VisionQueryIntent, LLMQueryIntent],
     Field(discriminator="intent_type")
 ]

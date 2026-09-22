@@ -6,7 +6,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.api.schemas import (
     UserPromptEvent, FrameResponseEvent, AbortGenerationEvent,
     StateChangeEvent, RequestFrameEvent, ExecActionEvent,
-    SystemCommandIntent, VisionQueryIntent, LLMQueryIntent, AssistantTextEvent
+    VolumeControlIntent, AppControlIntent, SystemStatusIntent,
+    VisionQueryIntent, LLMQueryIntent, AssistantTextEvent
 )
 from app.core.logger import get_logger
 
@@ -77,13 +78,29 @@ async def ws_agent(websocket: WebSocket):
                         await send_state("ROUTING", session_id)
                         intent = await router_svc.route(prompt_ev.text, session_id=session_id)
                         
-                        if isinstance(intent, SystemCommandIntent):
-                            exec_ev = ExecActionEvent(
-                                action=intent.action, 
-                                session_id=session_id
-                            )
-                            await websocket.send_text(exec_ev.model_dump_json())
+                        async def quick_reply_and_execute(reply_text: str, action: str = None, payload: dict = None):
+                            if action:
+                                exec_ev = ExecActionEvent(action=action, payload=payload, session_id=session_id)
+                                await websocket.send_text(exec_ev.model_dump_json())
+                            
+                            await send_state("STREAMING_TTS", session_id)
+                            await websocket.send_text(AssistantTextEvent(text=reply_text, session_id=session_id).model_dump_json())
+                            await send_state("SPEAKING", session_id)
+                            
+                            async for pcm_bytes in vox.stream_sentences([reply_text]):
+                                header = struct.pack(_HEADER_FMT, len(pcm_bytes))
+                                await websocket.send_bytes(header + pcm_bytes)
+                            await websocket.send_bytes(struct.pack(_HEADER_FMT, 0))
                             await send_state("STANDBY", session_id)
+                            
+                        if isinstance(intent, VolumeControlIntent):
+                            await quick_reply_and_execute("Jasne, modyfikuję głośność.", action=intent.action)
+                            return
+                        elif isinstance(intent, AppControlIntent):
+                            await quick_reply_and_execute(f"Uruchamiam aplikację {intent.app_name}.", action="open_app", payload={"app_name": intent.app_name})
+                            return
+                        elif isinstance(intent, SystemStatusIntent):
+                            await quick_reply_and_execute("Sprawdzam status.", action="check_status", payload={"query": intent.query})
                             return
                             
                         image_b64 = None
