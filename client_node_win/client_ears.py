@@ -126,8 +126,11 @@ class ClientEars:
             command_audio = []
             self.vad_iterator.reset_states()
             speech_started = False
+            speech_ended = False
             
-            while True:
+            vad_buffer = np.array([], dtype=np.float32)
+            
+            while not speech_ended:
                 chunk = await asyncio.to_thread(self._get_audio_chunk)
                 if not chunk:
                     continue
@@ -136,14 +139,23 @@ class ClientEars:
                 command_audio.append(audio_data)
                 
                 audio_float32 = audio_data.astype(np.float32) / 32768.0
-                speech_dict = self.vad_iterator(audio_float32)
+                vad_buffer = np.concatenate((vad_buffer, audio_float32))
                 
-                if speech_dict:
-                    if 'start' in speech_dict:
-                        speech_started = True
-                    elif 'end' in speech_dict:
-                        log.info("Koniec komendy (wykryto ciszę przez Silero VAD).")
-                        break
+                while len(vad_buffer) >= 512:
+                    vad_chunk = vad_buffer[:512]
+                    vad_buffer = vad_buffer[512:]
+                    
+                    speech_dict = self.vad_iterator(vad_chunk)
+                    if speech_dict:
+                        if 'start' in speech_dict:
+                            speech_started = True
+                        elif 'end' in speech_dict:
+                            log.info("Koniec komendy (wykryto ciszę przez Silero VAD).")
+                            speech_ended = True
+                            break
+                            
+                if speech_ended:
+                    break
                         
                 # Timeout jesli przez 5s nic nie powiedziano
                 if not speech_started and len(command_audio) > (5.0 * self.sample_rate / self.chunk_size):
@@ -154,6 +166,8 @@ class ClientEars:
                 if len(command_audio) > (15.0 * self.sample_rate / self.chunk_size):
                     log.info("Osiągnieto maksymalny czas komendy (15s).")
                     break
+                    
+            self.vad_iterator.reset_states()
 
             log.info("Transkrypcja audio...")
             full_audio = np.concatenate(command_audio)
