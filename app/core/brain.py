@@ -18,6 +18,8 @@ class SentenceBuffer:
 
     def add(self, text: str) -> list[str]:
         """Zwraca liste pelnych zdan wyodrebnionych z bufora."""
+        # Sanityzacja Markdown - usuwa znaki formatowania nie psujac slow
+        text = re.sub(r'[*_#`~>]', '', text)
         self.buffer += text
         sentences = []
         
@@ -68,7 +70,15 @@ class DaemonBrain:
         if not self._loaded:
             raise RuntimeError("LLM is not loaded")
 
-        messages = []
+        system_prompt = (
+            "Jesteś DAEMON, lokalnym asystentem technicznym. Zwracaj się per 'wodzu'. "
+            "ZAWSZE odpowiadaj wyłącznie w języku polskim. Twoje wypowiedzi trafiają bezpośrednio "
+            "do syntezatora mowy TTS, dlatego kategorycznie ZAKAZANE jest stosowanie jakiegokolwiek formatowania "
+            "Markdown (żadnych gwiazdek, backticków, hashy, myślników wyliczeniowych, bloków kodu ani emotikonów). "
+            "Odpowiadaj zwięźle, konkretnie i naturalnym językiem mówionym (maksymalnie 1-2 zdania)."
+        )
+
+        messages = [{"role": "system", "content": system_prompt}]
         msg = {"role": "user", "content": prompt}
         if image_b64:
             msg["images"] = [image_b64]

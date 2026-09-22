@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import queue
+import threading
 import numpy as np
 import sounddevice as sd
 
@@ -37,11 +38,12 @@ except ImportError:
 log = logging.getLogger("client.ears")
 
 class ClientEars:
-    def __init__(self, wake_word="alexa", stt_model="base", device="cuda"):
+    def __init__(self, wake_word="alexa", stt_model="small", device="cuda"):
         self.sample_rate = 16000
         self.chunk_size = 1280
         self.audio_queue = queue.Queue()
         self._is_listening = False
+        self._active_lock = threading.Lock()
         self._stream = None
         self.wake_word_name = wake_word
         
@@ -57,7 +59,7 @@ class ClientEars:
             try:
                 log.info(f"Ladowanie faster-whisper ({stt_model} na {device})...")
                 self.stt_model = WhisperModel(stt_model, device=device, compute_type="float16")
-                _ = self.stt_model.transcribe(np.zeros(16000, dtype=np.float32), beam_size=1, language="pl")
+                _ = self.stt_model.transcribe(np.zeros(16000, dtype=np.float32), beam_size=5, language="pl", vad_filter=False)
             except Exception as e:
                 log.warning(f"Błąd inicjalizacji/testu Whisper na {device}: {e}. Fallback na CPU (int8)...")
                 self.stt_model = WhisperModel(stt_model, device="cpu", compute_type="int8")
@@ -78,7 +80,7 @@ class ClientEars:
         except queue.Empty:
             return b""
 
-    async def listen_for_command(self) -> str:
+    async def listen_for_command(self, is_muted_func=None) -> str:
         """
         Nasluch mikrofonu. Najpierw oczekuje Wake Word.
         Po aktywacji nagrywa az do wykrycia ciszy (prosty VAD).
@@ -86,6 +88,10 @@ class ClientEars:
         """
         if not OWWModel:
             await asyncio.sleep(1)
+            return ""
+
+        if not self._active_lock.acquire(blocking=False):
+            log.warning("Odrzucono nakladajacy sie nasluch (wyscig watkow).")
             return ""
 
         self._is_listening = True
@@ -110,6 +116,10 @@ class ClientEars:
             while not ww_detected:
                 chunk = await asyncio.to_thread(self._get_audio_chunk)
                 if not chunk:
+                    continue
+                    
+                if is_muted_func and is_muted_func():
+                    # Ignorujemy ramki (zabezpieczenie przed samowybudzeniem / fałszywym barge-in)
                     continue
                     
                 audio_data = np.frombuffer(chunk, dtype=np.int16)
@@ -177,12 +187,12 @@ class ClientEars:
             
             def transcribe():
                 try:
-                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl")
+                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl", vad_filter=False)
                     return " ".join([s.text for s in segments]).strip()
                 except Exception:
                     # Natychmiastowy bezglosny fallback na CPU
                     self.stt_model = WhisperModel(self._stt_model_name, device="cpu", compute_type="int8")
-                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl")
+                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl", vad_filter=False)
                     return " ".join([s.text for s in segments]).strip()
                 
             command_text = await asyncio.to_thread(transcribe)
@@ -203,6 +213,8 @@ class ClientEars:
             # Oraz zresetuj stan detektora Wake Word
             if hasattr(self.oww_model, "reset"):
                 self.oww_model.reset()
+                
+            self._active_lock.release()
             
         return command_text
 

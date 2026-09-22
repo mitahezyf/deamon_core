@@ -33,7 +33,7 @@ async def ws_loop():
                 # Nasłuch z mikrofonu w pętli
                 async def mic_input():
                     while True:
-                        text = await ears.listen_for_command()
+                        text = await ears.listen_for_command(is_muted_func=lambda: mouth.is_playing)
                         if not text:
                             continue
                             

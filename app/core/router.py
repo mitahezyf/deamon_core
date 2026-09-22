@@ -22,7 +22,7 @@ class DaemonRouter:
     def __init__(self):
         # Odpytujemy natywne API Ollamy
         self.ollama_url = f"{settings.ollama_url}/api/chat"
-        self.timeout = 0.5  # 500 ms
+        self.timeout = 2.0  # Zwiekszony timeout na 2s
 
         self._adapter = TypeAdapter(IntentDecision)
 
