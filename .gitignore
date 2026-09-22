@@ -77,3 +77,5 @@ docs/*
 .antigravity
 venv_win/*.env
 *.env
+
+venv_win/*
