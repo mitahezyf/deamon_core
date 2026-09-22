@@ -58,7 +58,7 @@ class ClientEars:
             self._stt_model_name = stt_model
             try:
                 log.info(f"Ladowanie faster-whisper ({stt_model} na {device})...")
-                self.stt_model = WhisperModel(stt_model, device=device, compute_type="float16")
+                self.stt_model = WhisperModel(stt_model, device=device, compute_type="float16", local_files_only=True)
                 _ = self.stt_model.transcribe(np.zeros(16000, dtype=np.float32), beam_size=5, language="pl", vad_filter=False)
             except Exception as e:
                 log.warning(f"Błąd inicjalizacji/testu Whisper na {device}: {e}. Fallback na CPU (int8)...")
@@ -191,7 +191,7 @@ class ClientEars:
                     return " ".join([s.text for s in segments]).strip()
                 except Exception:
                     # Natychmiastowy bezglosny fallback na CPU
-                    self.stt_model = WhisperModel(self._stt_model_name, device="cpu", compute_type="int8")
+                    self.stt_model = WhisperModel(self._stt_model_name, device="cpu", compute_type="int8", local_files_only=True)
                     segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl", vad_filter=False)
                     return " ".join([s.text for s in segments]).strip()
                 

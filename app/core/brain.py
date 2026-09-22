@@ -71,6 +71,7 @@ class DaemonBrain:
             raise RuntimeError("LLM is not loaded")
 
         system_prompt = (
+            "Nie generuj znaczników <think>, odpowiedz bezpośrednio i natychmiast. "
             "Jesteś DAEMON, lokalnym asystentem technicznym. Zwracaj się per 'wodzu'. "
             "ZAWSZE odpowiadaj wyłącznie w języku polskim. Twoje wypowiedzi trafiają bezpośrednio "
             "do syntezatora mowy TTS, dlatego kategorycznie ZAKAZANE jest stosowanie jakiegokolwiek formatowania "
@@ -103,6 +104,7 @@ class DaemonBrain:
                 async with client.stream("POST", url, json=payload, timeout=None) as response:
                     response.raise_for_status()
                     full_text = ""
+                    buffer = ""
                     async for line in response.aiter_lines():
                         if not line:
                             continue
@@ -110,9 +112,31 @@ class DaemonBrain:
                             chunk = json.loads(line)
                             content = chunk.get("message", {}).get("content", "")
                             if content:
-                                full_text += content
-                                yield content
+                                buffer += content
+                                
+                                while "<think>" in buffer and "</think>" in buffer:
+                                    start = buffer.find("<think>")
+                                    end = buffer.find("</think>") + 8
+                                    buffer = buffer[:start] + buffer[end:]
+                                    
+                                if "<think>" in buffer:
+                                    continue
+                                    
+                                partial = False
+                                for i in range(1, 8):
+                                    if buffer.endswith("<think>"[:i]):
+                                        partial = True
+                                        break
+                                        
+                                if not partial and buffer:
+                                    full_text += buffer
+                                    yield buffer
+                                    buffer = ""
+
                             if chunk.get("done", False):
+                                if buffer and "<think>" not in buffer:
+                                    full_text += buffer
+                                    yield buffer
                                 break
                         except json.JSONDecodeError as e:
                             log.error("JSON decode error w brain.py: %s (line: %s)", e, line)

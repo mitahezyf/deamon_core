@@ -44,6 +44,13 @@ class DaemonRouter:
                 log.debug("Router: Heurystyka wyłapała komendę '%s' -> %s", kw, action_tuple)
                 if action_tuple[0] == "VOLUME_CONTROL":
                     return VolumeControlIntent(action=action_tuple[1])
+                    
+        import re
+        app_match = re.match(r'^(włącz|otwórz|odpal)\s+(.+)', text_lower)
+        if app_match:
+            app_name = app_match.group(2).strip()
+            log.debug("Router: Heurystyka wyłapała APP_CONTROL -> %s", app_name)
+            return AppControlIntent(app_name=app_name)
                 
         return None
 
