@@ -37,8 +37,11 @@ async def ws_synthesize(websocket: WebSocket):
             vox = websocket.app.state.vox
             chunk_count = 0
 
-            for chunk in vox.stream_chunks(text):
-                pcm_bytes = chunk.astype(np.float32).tobytes()
+            # Pomocniczy generator dla pojedynczego stringa
+            async def text_stream():
+                yield text
+
+            async for pcm_bytes in vox.stream_sentences(text_stream()):
                 header = struct.pack(_HEADER_FMT, len(pcm_bytes))
                 await websocket.send_bytes(header + pcm_bytes)
                 chunk_count += 1
