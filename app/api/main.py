@@ -32,6 +32,9 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         log.warning("Brain load skipped: %s", exc)
     app.state.brain = brain
+    
+    from app.core.router import DaemonRouter
+    app.state.router = DaemonRouter()
 
     log.info(
         "Daemon gotowy | LLM: %s | port: %d",
