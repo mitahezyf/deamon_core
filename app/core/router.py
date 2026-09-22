@@ -94,10 +94,20 @@ class DaemonRouter:
                 else:
                     content = str(data)
                 
-                # 3. Walidacja Type-Safe przez Pydantic
-                intent = self._adapter.validate_json(content)
-                log.debug("Router: LLM zwrocil intent '%s' (session_id=%s)", intent.intent_type, session_id)
-                return intent
+                # Walidacja: pusta odpowiedź od modelu Ollamy
+                if not content or not content.strip():
+                    log.warning("Router: Otrzymano pustą odpowiedź od modelu Ollamy. Fallback do LLM_QUERY.")
+                    return LLMQueryIntent(query=text)
+
+                content_clean = content.strip()
+                try:
+                    # 3. Walidacja Type-Safe przez Pydantic
+                    intent = self._adapter.validate_json(content_clean)
+                    log.debug("Router: LLM zwrocil intent '%s' (session_id=%s)", intent.intent_type, session_id)
+                    return intent
+                except Exception as val_err:
+                    log.warning("Router: Odpowiedź modelu nie spełnia schematu JSON (%s): %s. Fallback do LLM_QUERY.", val_err, content_clean[:80])
+                    return LLMQueryIntent(query=text)
 
         except httpx.TimeoutException:
             log.warning("Router: Timeout %ss przy odpytywaniu Ollamy. Fallback do LLM_QUERY.", self.timeout)
@@ -106,7 +116,7 @@ class DaemonRouter:
         except httpx.HTTPError as e:
             log.error("Router: Blad HTTP: %s. Fallback do LLM_QUERY.", e)
         except Exception as e:
-            log.error("Router: Blad walidacji/JSON: %s. Fallback do LLM_QUERY.", e)
+            log.error("Router: Nieoczekiwany błąd routera: %s. Fallback do LLM_QUERY.", e)
 
         # 4. Deterministyczny Fallback
         return LLMQueryIntent(query=text)
