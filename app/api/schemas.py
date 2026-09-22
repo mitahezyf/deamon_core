@@ -1,46 +1,35 @@
-from pydantic import BaseModel
+from typing import Any, Dict, Literal, Optional, Union
+from pydantic import BaseModel, Field
+from typing_extensions import Annotated
 
 # =============================================================================
 # DAEMON Core — API Schemas (serwer LXC)
-# Schematy STT, Ears, WakeWord naleza do client_node_win/
 # =============================================================================
 
-# --- zadania REST ---
-
+# --- ZADANIA I ODPOWIEDZI REST ---
 
 class SynthesizeRequest(BaseModel):
-    # zadanie syntezy mowy przez Piper TTS ONNX
     text: str
     output: str = "daemon_out.wav"
-
 
 class AssistantReplyRequest(BaseModel):
     text: str
 
-
-# --- odpowiedzi REST ---
-
-
 class SynthesizeResponse(BaseModel):
-    # wynik syntezy z metrykami latencji
     latency_first_chunk: float
     total_time: float
     audio_duration: float
     output: str
 
-
 class AssistantReplyResponse(BaseModel):
     reply: str
 
-
 class HealthResponse(BaseModel):
-    # minimalny health check
     status: str
     vox_loaded: bool
     device: str
     llm_model: str
     api_port: int
-
 
 class StatusResponse(BaseModel):
     status: str
@@ -53,10 +42,64 @@ class StatusResponse(BaseModel):
     mem_used_mb: int
     mem_total_mb: int
 
-
 class PublicConfigResponse(BaseModel):
     llm_model: str
     ollama_url: str
     language: str
     api_host: str
     api_port: int
+
+# --- PROTOKÓŁ WEBSOCKET (Klient -> Serwer) ---
+
+class UserPromptEvent(BaseModel):
+    event_type: Literal["user_prompt"] = "user_prompt"
+    text: str
+    session_id: str
+
+class FrameResponseEvent(BaseModel):
+    event_type: Literal["frame_response"] = "frame_response"
+    image_b64: str
+    session_id: str
+
+class AbortGenerationEvent(BaseModel):
+    event_type: Literal["abort_generation"] = "abort_generation"
+    session_id: str
+
+# --- PROTOKÓŁ WEBSOCKET (Serwer -> Klient) ---
+
+class RequestFrameEvent(BaseModel):
+    event_type: Literal["request_frame"] = "request_frame"
+    session_id: str
+
+class ExecActionEvent(BaseModel):
+    event_type: Literal["exec_action"] = "exec_action"
+    action: str
+    payload: Optional[Dict[str, Any]] = None
+    session_id: str
+
+class StateChangeEvent(BaseModel):
+    event_type: Literal["state_change"] = "state_change"
+    new_state: str
+    session_id: str
+
+# --- INTENT ROUTER (Decyzje) ---
+
+class SystemCommandIntent(BaseModel):
+    intent_type: Literal["SystemCommand"] = "SystemCommand"
+    action: Literal["volume_up", "volume_down", "pause", "resume", "mute", "unmute"] = Field(
+        description="Akcja systemowa do wykonania na urządzeniu klienckim."
+    )
+
+class VisionQueryIntent(BaseModel):
+    intent_type: Literal["VisionQuery"] = "VisionQuery"
+    query: str = Field(description="Oryginalne zapytanie użytkownika wymagające spojrzenia na ekran.")
+
+class LLMQueryIntent(BaseModel):
+    intent_type: Literal["LLMQuery"] = "LLMQuery"
+    query: str = Field(description="Oryginalne zapytanie użytkownika przeznaczone dla LLM (rozmowa, wiedza).")
+
+# Dyskryminowana unia IntentDecision
+IntentDecision = Annotated[
+    Union[SystemCommandIntent, VisionQueryIntent, LLMQueryIntent],
+    Field(discriminator="intent_type")
+]
