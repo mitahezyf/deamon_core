@@ -16,6 +16,11 @@ class ClientMouth:
         self.audio_queue = queue.Queue()
         self.stream = None
         
+    @property
+    def is_playing(self) -> bool:
+        """Zwraca True, jesli odtwarzacz ma dane w buforze."""
+        return not self.audio_queue.empty()
+        
     def start(self):
         """Uruchamia odtwarzanie."""
         if self.stream is not None:

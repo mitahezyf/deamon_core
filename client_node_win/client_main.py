@@ -30,29 +30,30 @@ async def ws_loop():
             async with websockets.connect(DAEMON_URL) as ws:
                 log.info("Połączono z DAEMON!")
                 
-                # Zastępcze przesyłanie poleceń wpisywanych z klawiatury w tle
-                async def keyboard_input():
-                    loop = asyncio.get_event_loop()
+                # Nasłuch z mikrofonu w pętli
+                async def mic_input():
                     while True:
-                        line = await loop.run_in_executor(None, input, "")
-                        if line.strip():
-                            # Sprawdzamy czy to specjalny skrót przerwania (barge-in)
-                            if line.strip().lower() == "abort":
-                                await ws.send(json.dumps({
-                                    "event_type": "abort_generation",
-                                    "session_id": "win_client"
-                                }))
-                                mouth.stop()
-                                continue
-                                
-                            payload = {
-                                "event_type": "user_prompt",
-                                "text": line.strip(),
+                        text = await ears.listen_for_command()
+                        if not text:
+                            continue
+                            
+                        # Sprawdzamy barge-in
+                        if mouth.is_playing:
+                            log.info("Barge-in: Przerywam mowienie asystenta!")
+                            mouth.stop()
+                            await ws.send(json.dumps({
+                                "event_type": "abort_generation",
                                 "session_id": "win_client"
-                            }
-                            await ws.send(json.dumps(payload))
+                            }))
+                            
+                        payload = {
+                            "event_type": "user_prompt",
+                            "text": text,
+                            "session_id": "win_client"
+                        }
+                        await ws.send(json.dumps(payload))
                 
-                input_task = asyncio.create_task(keyboard_input())
+                input_task = asyncio.create_task(mic_input())
                 
                 # Odbiór wiadomości
                 while True:
