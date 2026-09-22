@@ -1,6 +1,7 @@
 from typing import AsyncIterator, Optional
 import re
-from openai import AsyncOpenAI
+import httpx
+import json
 
 from app.core.config import settings
 from app.core.logger import get_logger
@@ -54,51 +55,52 @@ class SentenceBuffer:
 class DaemonBrain:
     def __init__(self) -> None:
         self._loaded = False
-        self.client: Optional[AsyncOpenAI] = None
 
     @property
     def is_loaded(self) -> bool:
         return self._loaded
 
     def load(self) -> None:
-        self.client = AsyncOpenAI(
-            base_url=f"{settings.ollama_url}/v1",
-            api_key="ollama"  # Wymagane przez biblioteke openai, mimo ze Ollama tego nie uzywa
-        )
         self._loaded = True
         log.info("DaemonBrain loaded (model=%s, url=%s)", settings.llm_model, settings.ollama_url)
 
     async def stream_chat(self, prompt: str, image_b64: Optional[str] = None) -> AsyncIterator[str]:
-        if not self._loaded or not self.client:
+        if not self._loaded:
             raise RuntimeError("LLM is not loaded")
 
         messages = []
+        msg = {"role": "user", "content": prompt}
         if image_b64:
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
-                    }
-                ]
-            })
-        else:
-            messages.append({"role": "user", "content": prompt})
+            msg["images"] = [image_b64]
+        messages.append(msg)
 
         log.debug("Brain: Rozpoczynam streaming odpowiedzi (model: %s)", settings.llm_model)
         
+        payload = {
+            "model": settings.llm_model,
+            "messages": messages,
+            "stream": True
+        }
+        
+        url = f"{settings.ollama_url}/api/chat"
+        
         try:
-            stream = await self.client.chat.completions.create(
-                model=settings.llm_model,
-                messages=messages,
-                stream=True
-            )
-            
-            async for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
+            async with httpx.AsyncClient() as client:
+                async with client.stream("POST", url, json=payload, timeout=None) as response:
+                    response.raise_for_status()
+                    full_text = ""
+                    async for line in response.aiter_lines():
+                        if line:
+                            try:
+                                data = json.loads(line)
+                                chunk_text = data.get("message", {}).get("content", "")
+                                if chunk_text:
+                                    full_text += chunk_text
+                                    yield chunk_text
+                            except json.JSONDecodeError:
+                                pass
+                                
+                    log.info(f"[DAEMON BRAIN ODPOWIEDŹ]: {full_text}")
         except Exception as exc:
             log.error("LLM streaming failed: %s", exc)
             yield "Przepraszam, wystąpił błąd generatora LLM."

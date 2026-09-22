@@ -67,6 +67,9 @@ async def ws_loop():
                             
                             if event_type == "state_change":
                                 log.info("DAEMON Stan -> %s", data.get("new_state"))
+                                
+                            elif event_type == "assistant_text":
+                                print(f"\n[DAEMON]: {data.get('text')}\n")
                             
                             elif event_type == "request_frame":
                                 log.info("DAEMON poprosił o obraz. Wykonywanie zrzutu...")

@@ -82,6 +82,11 @@ class StateChangeEvent(BaseModel):
     new_state: str
     session_id: str
 
+class AssistantTextEvent(BaseModel):
+    event_type: Literal["assistant_text"] = "assistant_text"
+    text: str
+    session_id: str
+
 # --- INTENT ROUTER (Decyzje) ---
 
 class SystemCommandIntent(BaseModel):

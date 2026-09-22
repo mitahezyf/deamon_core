@@ -20,9 +20,8 @@ class DaemonRouter:
     """
 
     def __init__(self):
-        # Odpytujemy API kompatybilne z OpenAI wystawione przez Ollame
-        self.ollama_url = f"{settings.ollama_url}/v1/chat/completions"
-        self.model = "qwen2.5:0.5b"
+        # Odpytujemy natywne API Ollamy
+        self.ollama_url = f"{settings.ollama_url}/api/chat"
         self.timeout = 0.5  # 500 ms
 
         self._adapter = TypeAdapter(IntentDecision)
@@ -77,14 +76,14 @@ class DaemonRouter:
         )
 
         payload = {
-            "model": self.model,
+            "model": settings.router_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
-            "temperature": 0.0,
-            "max_tokens": 60,
-            "response_format": {"type": "json_object"}
+            "options": {"temperature": 0.0, "num_predict": 60},
+            "format": "json",
+            "stream": False
         }
 
         try:
@@ -93,7 +92,7 @@ class DaemonRouter:
                 response.raise_for_status()
                 
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
+                content = data["message"]["content"]
                 
                 # 3. Walidacja Type-Safe przez Pydantic
                 intent = self._adapter.validate_json(content)

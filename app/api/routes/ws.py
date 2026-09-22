@@ -6,7 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.api.schemas import (
     UserPromptEvent, FrameResponseEvent, AbortGenerationEvent,
     StateChangeEvent, RequestFrameEvent, ExecActionEvent,
-    SystemCommandIntent, VisionQueryIntent, LLMQueryIntent
+    SystemCommandIntent, VisionQueryIntent, LLMQueryIntent, AssistantTextEvent
 )
 from app.core.logger import get_logger
 
@@ -113,9 +113,11 @@ async def ws_agent(websocket: WebSocket):
                             async for token in text_stream:
                                 sentences = sb.add(token)
                                 for sentence in sentences:
+                                    await websocket.send_text(AssistantTextEvent(text=sentence, session_id=session_id).model_dump_json())
                                     yield sentence
                             remainder = sb.flush()
                             if remainder:
+                                await websocket.send_text(AssistantTextEvent(text=remainder, session_id=session_id).model_dump_json())
                                 yield remainder
 
                         await send_state("STREAMING_TTS", session_id)
