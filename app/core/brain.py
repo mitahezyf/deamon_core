@@ -3,7 +3,7 @@ import re
 import httpx
 import json
 
-from app.core.config import settings
+from config import server_settings
 from app.core.logger import get_logger
 
 log = get_logger("brain")
@@ -64,20 +64,13 @@ class DaemonBrain:
 
     def load(self) -> None:
         self._loaded = True
-        log.info("DaemonBrain loaded (model=%s, url=%s)", settings.llm_model, settings.ollama_url)
+        log.info("DaemonBrain loaded (model=%s, url=%s)", server_settings.model_brain, server_settings.ollama_host)
 
     async def stream_chat(self, prompt: str, image_b64: Optional[str] = None) -> AsyncIterator[str]:
         if not self._loaded:
             raise RuntimeError("LLM is not loaded")
 
-        system_prompt = (
-            "Nie generuj znaczników <think>, odpowiedz bezpośrednio i natychmiast. "
-            "Jesteś DAEMON, lokalnym asystentem technicznym. Zwracaj się per 'wodzu'. "
-            "ZAWSZE odpowiadaj wyłącznie w języku polskim. Twoje wypowiedzi trafiają bezpośrednio "
-            "do syntezatora mowy TTS, dlatego kategorycznie ZAKAZANE jest stosowanie jakiegokolwiek formatowania "
-            "Markdown (żadnych gwiazdek, backticków, hashy, myślników wyliczeniowych, bloków kodu ani emotikonów). "
-            "Odpowiadaj zwięźle, konkretnie i naturalnym językiem mówionym (maksymalnie 1-2 zdania)."
-        )
+        system_prompt = server_settings.get_brain_prompt()
 
         messages = [{"role": "system", "content": system_prompt}]
         msg = {"role": "user", "content": prompt}
@@ -85,10 +78,10 @@ class DaemonBrain:
             msg["images"] = [image_b64]
         messages.append(msg)
 
-        log.debug("Brain: Rozpoczynam streaming odpowiedzi (model: %s)", settings.llm_model)
+        log.debug("Brain: Rozpoczynam streaming odpowiedzi (model: %s)", server_settings.model_brain)
         
         payload = {
-            "model": settings.llm_model,
+            "model": server_settings.model_brain,
             "messages": messages,
             "stream": True,
             "options": {
@@ -97,7 +90,7 @@ class DaemonBrain:
             }
         }
         
-        url = f"{settings.ollama_url}/api/chat"
+        url = f"{server_settings.ollama_host}/api/chat"
         
         try:
             async with httpx.AsyncClient() as client:
@@ -105,36 +98,40 @@ class DaemonBrain:
                     response.raise_for_status()
                     full_text = ""
                     buffer = ""
+                    in_thinking = False
                     async for line in response.aiter_lines():
                         if not line:
                             continue
                         try:
                             chunk = json.loads(line)
-                            content = chunk.get("message", {}).get("content", "")
+                            if hasattr(chunk, "message") and hasattr(chunk.message, "content"):
+                                content = chunk.message.content or ""
+                            elif isinstance(chunk, dict):
+                                content = chunk.get("message", {}).get("content", "")
+                            else:
+                                content = ""
+                            
                             if content:
+                                if "<think>" in content:
+                                    in_thinking = True
+                                    content = content.replace("<think>", "")
+                                if "</think>" in content:
+                                    in_thinking = False
+                                    content = content.replace("</think>", "")
+                                    
+                                if in_thinking:
+                                    continue
+                                
                                 buffer += content
                                 
-                                while "<think>" in buffer and "</think>" in buffer:
-                                    start = buffer.find("<think>")
-                                    end = buffer.find("</think>") + 8
-                                    buffer = buffer[:start] + buffer[end:]
-                                    
-                                if "<think>" in buffer:
-                                    continue
-                                    
-                                partial = False
-                                for i in range(1, 8):
-                                    if buffer.endswith("<think>"[:i]):
-                                        partial = True
-                                        break
-                                        
-                                if not partial and buffer:
+                                # Send complete content out of buffer
+                                if buffer:
                                     full_text += buffer
                                     yield buffer
                                     buffer = ""
 
-                            if chunk.get("done", False):
-                                if buffer and "<think>" not in buffer:
+                            if isinstance(chunk, dict) and chunk.get("done", False):
+                                if buffer:
                                     full_text += buffer
                                     yield buffer
                                 break

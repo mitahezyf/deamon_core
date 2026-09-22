@@ -38,14 +38,22 @@ except ImportError:
 log = logging.getLogger("client.ears")
 
 class ClientEars:
-    def __init__(self, wake_word="alexa", stt_model="small", device="cuda"):
+    def __init__(self):
+        import sys
+        from pathlib import Path
+        if str(Path(__file__).resolve().parent.parent) not in sys.path:
+            sys.path.append(str(Path(__file__).resolve().parent.parent))
+        from config import client_settings
+
         self.sample_rate = 16000
         self.chunk_size = 1280
         self.audio_queue = queue.Queue()
         self._is_listening = False
         self._active_lock = threading.Lock()
         self._stream = None
-        self.wake_word_name = wake_word
+        self.wake_word_name = client_settings.wakeword_model
+        self.vad_timeout = client_settings.vad_silence_timeout_ms
+        self.whisper_compute = client_settings.whisper_compute_type
         
         if OWWModel and WhisperModel and load_silero_vad:
             log.info("Ladowanie modelu openWakeWord...")
@@ -53,16 +61,17 @@ class ClientEars:
             
             log.info("Ladowanie modelu Silero VAD (ONNX CPU)...")
             self.vad_model = load_silero_vad(onnx=True)
-            self.vad_iterator = VADIterator(self.vad_model, sampling_rate=16000, threshold=0.5, min_silence_duration_ms=700)
+            self.vad_iterator = VADIterator(self.vad_model, sampling_rate=16000, threshold=client_settings.wakeword_threshold, min_silence_duration_ms=self.vad_timeout)
             
-            self._stt_model_name = stt_model
+            self._stt_model_name = client_settings.whisper_model_name
+            device = client_settings.whisper_device
             try:
-                log.info(f"Ladowanie faster-whisper ({stt_model} na {device})...")
-                self.stt_model = WhisperModel(stt_model, device=device, compute_type="float16", local_files_only=True)
+                log.info(f"Ladowanie faster-whisper ({self._stt_model_name} na {device})...")
+                self.stt_model = WhisperModel(self._stt_model_name, device=device, compute_type=self.whisper_compute, local_files_only=True)
                 _ = self.stt_model.transcribe(np.zeros(16000, dtype=np.float32), beam_size=5, language="pl", vad_filter=False)
             except Exception as e:
-                log.warning(f"Błąd inicjalizacji/testu Whisper na {device}: {e}. Fallback na CPU (int8)...")
-                self.stt_model = WhisperModel(stt_model, device="cpu", compute_type="int8")
+                log.warning(f"Błąd inicjalizacji/testu Whisper na {device}: {e}. Fallback na CPU (int8)...", exc_info=True)
+                self.stt_model = WhisperModel(self._stt_model_name, device="cpu", compute_type="int8", local_files_only=True)
                 
             log.info("ClientEars gotowy.")
         else:
@@ -189,8 +198,11 @@ class ClientEars:
                 try:
                     segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl", vad_filter=False)
                     return " ".join([s.text for s in segments]).strip()
-                except Exception:
-                    # Natychmiastowy bezglosny fallback na CPU
+                except ValueError as ve:
+                    log.error(f"Błąd wartości (ValueError) przy transkrypcji Whisper: {ve}")
+                    return ""
+                except Exception as ex:
+                    log.warning(f"Nieznany błąd GPU podczas transkrypcji: {ex}. Próba ratunkowego fallbacku na CPU...")
                     self.stt_model = WhisperModel(self._stt_model_name, device="cpu", compute_type="int8", local_files_only=True)
                     segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl", vad_filter=False)
                     return " ".join([s.text for s in segments]).strip()

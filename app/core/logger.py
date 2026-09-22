@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from app.core.config import settings
+from config import server_settings as settings
 
 # format logu: czas | poziom (wyrownany) | nazwa modulu | tresc
 _LOG_FMT = "%(asctime)s [%(levelname)-8s] %(name)-24s - %(message)s"

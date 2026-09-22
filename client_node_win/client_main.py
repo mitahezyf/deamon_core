@@ -15,7 +15,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("client.main")
 
-DAEMON_URL = "ws://192.168.0.103:8000/api/v1/ws/agent" # Zmień na IP swojego serwera LXC
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from config import client_settings
+
+DAEMON_URL = client_settings.daemon_server_url
 _HEADER_FMT = ">I"
 
 async def ws_loop():

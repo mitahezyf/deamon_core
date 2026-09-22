@@ -10,7 +10,7 @@ from app.api.schemas import (
     SynthesizeRequest,
     SynthesizeResponse,
 )
-from app.core.config import settings
+from config import server_settings as settings
 from app.core.logger import get_logger
 
 log = get_logger("api.http")

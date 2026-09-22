@@ -87,7 +87,10 @@ async def ws_agent(websocket: WebSocket):
                             await websocket.send_text(AssistantTextEvent(text=reply_text, session_id=session_id).model_dump_json())
                             await send_state("SPEAKING", session_id)
                             
-                            async for pcm_bytes in vox.stream_sentences([reply_text]):
+                            async def single_sentence_gen():
+                                yield reply_text
+                                
+                            async for pcm_bytes in vox.stream_sentences(single_sentence_gen()):
                                 header = struct.pack(_HEADER_FMT, len(pcm_bytes))
                                 await websocket.send_bytes(header + pcm_bytes)
                             await websocket.send_bytes(struct.pack(_HEADER_FMT, 0))

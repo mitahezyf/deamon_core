@@ -10,7 +10,7 @@ from app.api.routes.http import router as http_router
 from app.api.routes.ui import router as ui_router
 from app.api.routes.ws import router as ws_router
 from app.core.brain import DaemonBrain
-from app.core.config import settings
+from config import server_settings as settings
 from app.core.logger import get_logger
 from app.core.vox import DaemonVox
 

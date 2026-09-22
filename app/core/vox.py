@@ -23,7 +23,7 @@ try:
 except ImportError:
     PiperVoice = None
 
-from app.core.config import settings
+from config import server_settings as settings
 from app.core.logger import get_logger
 
 log = get_logger("vox")
