@@ -30,6 +30,7 @@ class HealthResponse(BaseModel):
     device: str
     llm_model: str
     api_port: int
+    memgraph_connected: bool
 
 class StatusResponse(BaseModel):
     status: str
@@ -116,3 +117,24 @@ IntentDecision = Annotated[
     Union[VolumeControlIntent, AppControlIntent, SystemStatusIntent, VisionQueryIntent, LLMQueryIntent],
     Field(discriminator="intent_type")
 ]
+
+# --- GRAPH RAG / SESSION MEMORY ---
+
+class SessionMemoryRequest(BaseModel):
+    session_id: str = Field(description="Unikalny identyfikator sesji.")
+    entity: str = Field(description="Podmiot relacji.")
+    relation: str = Field(description="Nazwa relacji (np. LUBI, ZNA).")
+    target: str = Field(description="Obiekt docelowy relacji.")
+
+class GraphNode(BaseModel):
+    id: int
+    label: str
+
+class GraphEdge(BaseModel):
+    from_id: int
+    to_id: int
+    label: str
+
+class GraphDataResponse(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]

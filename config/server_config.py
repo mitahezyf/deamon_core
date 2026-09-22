@@ -16,6 +16,7 @@ class ServerSettings(BaseSettings):
     )
 
     ollama_host: str = "http://192.168.0.215:11434"
+    memgraph_uri: str = "bolt://192.168.0.106:7687"
     model_brain: str = "huihui_ai/qwen3.5-abliterated:9b"
     model_router: str = "huihui_ai/qwen3.5-abliterated:0.8b"
 

@@ -9,7 +9,9 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes.http import router as http_router
 from app.api.routes.ui import router as ui_router
 from app.api.routes.ws import router as ws_router
+from app.api.routes.graph import router as graph_router
 from app.core.brain import DaemonBrain
+from app.core.database import MemgraphClient
 from config import server_settings as settings
 from app.core.logger import get_logger
 from app.core.vox import DaemonVox
@@ -36,6 +38,10 @@ async def lifespan(app: FastAPI):
     from app.core.router import DaemonRouter
     app.state.router = DaemonRouter()
 
+    db = MemgraphClient()
+    await db.connect()
+    app.state.db = db
+
     log.info(
         "Daemon gotowy | LLM: %s | port: %s",
         settings.model_brain,
@@ -44,6 +50,8 @@ async def lifespan(app: FastAPI):
     yield
     # sprzatanie przy wylaczeniu
     log.info("Daemon zatrzymywany...")
+    await app.state.db.close()
+    del app.state.db
     del app.state.brain
     del app.state.vox
     log.info("Daemon zatrzymany.")
@@ -68,6 +76,7 @@ app.add_middleware(
 app.include_router(http_router)
 app.include_router(ws_router)
 app.include_router(ui_router)
+app.include_router(graph_router)
 
 _STATIC_DIR = Path(__file__).resolve().parents[1] / "web" / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

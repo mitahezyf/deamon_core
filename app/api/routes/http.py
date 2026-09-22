@@ -37,10 +37,16 @@ def _build_runtime_status(request: Request) -> dict:
 async def health(request: Request):
     # zwraca stan serwera, przydatne do debugowania i monitorowania przez GUI
     runtime = _build_runtime_status(request)
+    
+    memgraph_connected = False
+    if hasattr(request.app.state, "db") and request.app.state.db:
+        memgraph_connected = await request.app.state.db.verify_connectivity()
+        
     log.debug(
-        "Health check - vox_loaded=%s, device=%s",
+        "Health check - vox_loaded=%s, device=%s, memgraph_connected=%s",
         runtime["vox_loaded"],
         runtime["device"],
+        memgraph_connected
     )
     return HealthResponse(
         status=runtime["status"],
@@ -48,6 +54,7 @@ async def health(request: Request):
         device=runtime["device"],
         llm_model=runtime["llm_model"],
         api_port=runtime["api_port"],
+        memgraph_connected=memgraph_connected
     )
 
 
