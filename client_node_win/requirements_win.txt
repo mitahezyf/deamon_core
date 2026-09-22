@@ -1,0 +1,18 @@
+# Wymagania klienta na stacji roboczej (Windows)
+
+# --- Siec i Komunikacja ---
+websockets>=12.0
+
+# --- Audio Odtwarzanie i Nasluch ---
+sounddevice>=0.4.6
+numpy>=1.26.0
+
+# --- STT i Wake Word (do zaimplementowania w Etapie 8/9) ---
+# pyaudio>=0.2.14
+# openwakeword>=0.6.0
+# silero-vad
+# faster-whisper>=1.0.0
+
+# --- Zmysl Wzroku (Vision) ---
+mss>=9.0.1
+pillow>=10.2.0
