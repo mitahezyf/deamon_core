@@ -89,7 +89,11 @@ class DaemonBrain:
         payload = {
             "model": settings.llm_model,
             "messages": messages,
-            "stream": True
+            "stream": True,
+            "options": {
+                "temperature": 0.3,
+                "top_p": 0.9
+            }
         }
         
         url = f"{settings.ollama_url}/api/chat"
@@ -100,17 +104,22 @@ class DaemonBrain:
                     response.raise_for_status()
                     full_text = ""
                     async for line in response.aiter_lines():
-                        if line:
-                            try:
-                                data = json.loads(line)
-                                chunk_text = data.get("message", {}).get("content", "")
-                                if chunk_text:
-                                    full_text += chunk_text
-                                    yield chunk_text
-                            except json.JSONDecodeError:
-                                pass
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            content = chunk.get("message", {}).get("content", "")
+                            if content:
+                                full_text += content
+                                yield content
+                            if chunk.get("done", False):
+                                break
+                        except json.JSONDecodeError as e:
+                            log.error("JSON decode error w brain.py: %s (line: %s)", e, line)
+                        except Exception as e:
+                            log.error("Nieoczekiwany blad przetwarzania chunka w brain.py: %s", e, exc_info=True)
                                 
                     log.info(f"[DAEMON BRAIN ODPOWIEDŹ]: {full_text}")
         except Exception as exc:
-            log.error("LLM streaming failed: %s", exc)
+            log.error("LLM streaming failed: %s", exc, exc_info=True)
             yield "Przepraszam, wystąpił błąd generatora LLM."

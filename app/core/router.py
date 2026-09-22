@@ -92,7 +92,7 @@ class DaemonRouter:
                 response.raise_for_status()
                 
                 data = response.json()
-                content = data["message"]["content"]
+                content = data.get("message", {}).get("content", "")
                 
                 # 3. Walidacja Type-Safe przez Pydantic
                 intent = self._adapter.validate_json(content)
