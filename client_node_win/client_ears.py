@@ -4,6 +4,22 @@ import queue
 import numpy as np
 import sounddevice as sd
 
+import os
+import sys
+
+# Dynamiczne ladowanie DLL dla CUDA (CTranslate2 / faster-whisper) na Windows
+if os.name == 'nt':
+    try:
+        import site
+        # Zaleznosci moga byc w bin lub lib
+        for sp in site.getsitepackages() + [site.getusersitepackages()]:
+            for pkg in ["nvidia\\cublas\\bin", "nvidia\\cublas\\lib", "nvidia\\cudnn\\bin", "nvidia\\cudnn\\lib"]:
+                dll_path = os.path.join(sp, pkg)
+                if os.path.exists(dll_path):
+                    os.add_dll_directory(dll_path)
+    except Exception:
+        pass
+
 try:
     from faster_whisper import WhisperModel
     import openwakeword
@@ -30,8 +46,13 @@ class ClientEars:
             log.info("Ladowanie modelu openWakeWord...")
             self.oww_model = OWWModel(inference_framework="onnx")
             
-            log.info(f"Ladowanie faster-whisper ({stt_model} na {device})...")
-            self.stt_model = WhisperModel(stt_model, device=device, compute_type="float16")
+            try:
+                log.info(f"Ladowanie faster-whisper ({stt_model} na {device})...")
+                self.stt_model = WhisperModel(stt_model, device=device, compute_type="float16")
+            except Exception as e:
+                log.warning(f"Błąd inicjalizacji Whisper na {device}: {e}. Fallback na CPU (int8)...")
+                self.stt_model = WhisperModel(stt_model, device="cpu", compute_type="int8")
+                
             log.info("ClientEars gotowy.")
         else:
             log.error("Nie udalo sie zainicjalizowac modeli AI z powodu braku zaleznosci.")
@@ -143,6 +164,13 @@ class ClientEars:
                 self._stream.close()
                 self._stream = None
             self._is_listening = False
+            
+            # Wyczyść resztki audio po nagraniu z kolejki, by wyeliminować fałszywe powtórzenia
+            with self.audio_queue.mutex:
+                self.audio_queue.queue.clear()
+            # Oraz zresetuj stan detektora Wake Word
+            if hasattr(self.oww_model, "reset"):
+                self.oww_model.reset()
             
         return command_text
 

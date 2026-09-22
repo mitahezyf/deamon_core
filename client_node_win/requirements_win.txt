@@ -11,6 +11,8 @@ numpy>=1.26.0
 openwakeword>=0.6.0
 faster-whisper>=1.0.0
 onnxruntime-gpu>=1.17.0
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
 
 # --- Zmysl Wzroku (Vision) ---
 mss>=9.0.1

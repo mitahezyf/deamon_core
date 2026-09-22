@@ -14,6 +14,7 @@ class ClientMouth:
         self.channels = channels
         # Kolejka wewnetrzna (watek-bezpieczna) do przekazywania PCM z asyncio do callbacku C
         self.audio_queue = queue.Queue()
+        self._audio_buffer = bytearray()
         self.stream = None
         
     @property
@@ -30,31 +31,28 @@ class ClientMouth:
             if status:
                 log.warning("Sounddevice status: %s", status)
             
-            chunk_size = len(outdata)
-            data_to_write = bytearray()
+            outdata.fill(0)
+            chunk_size_bytes = frames * self.channels * 2  # 16-bit = 2 bajty na próbkę
             
-            # Pobieramy dane z kolejki az wypelnimy bufor sounddevice
-            while len(data_to_write) < chunk_size:
+            # Pobieramy dane z kolejki aż wypełnimy potrzebny rozmiar
+            while len(self._audio_buffer) < chunk_size_bytes:
                 try:
-                    # Pobieramy 1 blok
                     data = self.audio_queue.get_nowait()
-                    data_to_write.extend(data)
+                    self._audio_buffer.extend(data)
                 except queue.Empty:
                     break
             
-            # Jesli nie ma wystarczajaco danych, wypelniamy reszte zerami (cisza)
-            if len(data_to_write) < chunk_size:
-                data_to_write.extend(b'\x00' * (chunk_size - len(data_to_write)))
-            elif len(data_to_write) > chunk_size:
-                # W praktyce powinnismy obsluzyc nadmiar, ale dla uproszczenia
-                # zakladamy chunk_size z API == chunk_size z stream
-                pass
+            bytes_to_read = min(chunk_size_bytes, len(self._audio_buffer))
+            
+            if bytes_to_read > 0:
+                # Nasze audio to 16-bit PCM, sounddevice oczekuje int16 przy tym dtype
+                import numpy as np
+                audio_data = np.frombuffer(self._audio_buffer[:bytes_to_read], dtype=np.int16)
+                num_elements = len(audio_data)
+                outdata[:num_elements] = audio_data.reshape(-1, self.channels)
                 
-            # Konwersja do float/int i zapis do outdata (outdata oczekuje numpy buffer)
-            # Nasze audio to 16-bit PCM, sounddevice oczekuje int16 przy tym dtype
-            import numpy as np
-            audio_data = np.frombuffer(data_to_write[:chunk_size], dtype=np.int16)
-            outdata[:] = audio_data.reshape(-1, self.channels)
+                # Usuwamy zużyte bajty
+                del self._audio_buffer[:bytes_to_read]
 
         self.stream = sd.OutputStream(
             samplerate=self.sample_rate,
@@ -74,6 +72,7 @@ class ClientMouth:
         log.info("ClientMouth Barge-in: Czyszczenie bufora audio!")
         with self.audio_queue.mutex:
             self.audio_queue.queue.clear()
+        self._audio_buffer.clear()
             
     def shutdown(self):
         """Calkowite zamkniecie strumienia."""
