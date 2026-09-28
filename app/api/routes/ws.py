@@ -2,6 +2,7 @@ import struct
 import asyncio
 import json
 import time
+import uuid
 from typing import Optional, Dict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
@@ -9,6 +10,7 @@ from starlette.websockets import WebSocketState
 from app.api.schemas import (
     UserPromptEvent, FrameResponseEvent, AbortGenerationEvent,
     StateChangeEvent, RequestFrameEvent, ExecActionEvent,
+    ExecActionResultEvent,
     VolumeControlIntent, AppControlIntent, SystemStatusIntent,
     VisionQueryIntent, LLMQueryIntent, AssistantTextEvent
 )
@@ -56,6 +58,8 @@ class ClientSession:
         self.prompt_lock = asyncio.Lock()
         self.last_prompt_text: Optional[str] = None
         self.last_prompt_time: float = 0.0
+        # Futures do odbierania wyników exec_action z klienta (ReAct loop)
+        self.tool_result_futures: Dict[str, asyncio.Future] = {}
 
     async def disconnect_and_cancel(self):
         log.warning("Zamykanie istniejącej/poprzedniej sesji WebSocket dla klienta %s", self.client_id)
@@ -139,6 +143,19 @@ async def ws_agent(websocket: WebSocket):
                     log.info("Przerwano aktualne generowanie (barge-in).")
                 abort_ev = AbortGenerationEvent.model_validate(data)
                 await send_state("STANDBY", abort_ev.session_id)
+                continue
+
+            if event_type == "exec_action_result":
+                # Wynik narzędzia z klienta — rozwiązujemy czekający Future
+                req_id = data.get("request_id", "")
+                result_text = data.get("result", "")
+                if req_id and req_id in session.tool_result_futures:
+                    future = session.tool_result_futures[req_id]
+                    if not future.done():
+                        future.set_result(result_text)
+                    log.info("Otrzymano exec_action_result (req_id=%s): %s", req_id, result_text[:80])
+                else:
+                    log.warning("Otrzymano exec_action_result bez pasującego req_id: %s", req_id)
                 continue
 
             if event_type == "tts_request":
@@ -231,12 +248,53 @@ async def ws_agent(websocket: WebSocket):
                                 await quick_reply_and_execute("Sprawdzam status.", action="check_status", payload={"query": intent.query})
                                 return
                                 
+                            # ---- Tool executor callback (ReAct) ----
+                            async def tool_executor(tool_name: str, tool_args: dict) -> str:
+                                """Wykonuje narzędzie poprzez WebSocket do klienta."""
+                                req_id = str(uuid.uuid4())[:8]
+
+                                if tool_name == "request_frame":
+                                    req_ev = RequestFrameEvent(session_id=session_id)
+                                    await safe_send_text(websocket, req_ev.model_dump_json())
+                                    try:
+                                        frame_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+                                        frame_data = json.loads(frame_msg)
+                                        if frame_data.get("event_type") == "frame_response":
+                                            frame_ev = FrameResponseEvent.model_validate(frame_data)
+                                            return json.dumps({"status": "ok", "result": "Screenshot captured.", "image_b64": frame_ev.image_b64})
+                                    except asyncio.TimeoutError:
+                                        log.warning("Timeout oczekiwania na frame_response (tool_executor)")
+                                    return json.dumps({"status": "error", "message": "Frame capture timeout"})
+
+                                elif tool_name == "desktop_action":
+                                    # Wyślij exec_action do klienta i czekaj na wynik
+                                    future: asyncio.Future = asyncio.get_event_loop().create_future()
+                                    session.tool_result_futures[req_id] = future
+
+                                    exec_ev = ExecActionEvent(
+                                        action=tool_args.get("action", ""),
+                                        payload=tool_args,
+                                        session_id=session_id,
+                                        request_id=req_id,
+                                    )
+                                    await safe_send_text(websocket, exec_ev.model_dump_json())
+
+                                    try:
+                                        result_text = await asyncio.wait_for(future, timeout=8.0)
+                                        return json.dumps({"status": "ok", "result": result_text})
+                                    except asyncio.TimeoutError:
+                                        log.warning("Timeout oczekiwania na exec_action_result (req_id=%s)", req_id)
+                                        return json.dumps({"status": "error", "message": "Action execution timeout"})
+                                    finally:
+                                        session.tool_result_futures.pop(req_id, None)
+
+                                return json.dumps({"status": "error", "message": f"Unknown tool: {tool_name}"})
+
+                            # ---- Obsługa zapytań LLM / Vision przez ReAct loop ----
                             image_b64 = None
                             if isinstance(intent, VisionQueryIntent):
                                 req_ev = RequestFrameEvent(session_id=session_id)
                                 await safe_send_text(websocket, req_ev.model_dump_json())
-                                
-                                # Czekamy na klatke (z krotkim timeoutem)
                                 try:
                                     frame_msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
                                     frame_data = json.loads(frame_msg)
@@ -245,11 +303,18 @@ async def ws_agent(websocket: WebSocket):
                                         image_b64 = frame_ev.image_b64
                                 except asyncio.TimeoutError:
                                     log.warning("Timeout oczekiwania na frame_response")
-                            
+
                             await send_state("INFERENCE_LLM", session_id)
                             query = intent.query
-                            text_stream = brain.stream_chat(query, image_b64)
-                            
+
+                            # Użyj stream_chat_with_tools (ReAct loop z tool calling)
+                            text_stream = brain.stream_chat_with_tools(
+                                query,
+                                image_b64=image_b64,
+                                tool_executor=tool_executor,
+                                max_rounds=2,
+                            )
+
                             from app.core.brain import SentenceBuffer
                             async def sentence_generator():
                                 sb = SentenceBuffer(min_length=15)
@@ -271,7 +336,7 @@ async def ws_agent(websocket: WebSocket):
                                     raise
 
                             await send_state("STREAMING_TTS", session_id)
-                            
+
                             chunk_count = 0
                             async for pcm_bytes in vox.stream_sentences(sentence_generator()):
                                 if websocket.client_state != WebSocketState.CONNECTED:
@@ -283,7 +348,7 @@ async def ws_agent(websocket: WebSocket):
                                 if not await safe_send_bytes(websocket, header + pcm_bytes):
                                     break
                                 chunk_count += 1
-                                
+
                             await safe_send_bytes(websocket, struct.pack(_HEADER_FMT, 0))
                             await send_state("STANDBY", session_id)
 

@@ -155,8 +155,36 @@ async def ws_loop():
                                     }))
                                     
                                 elif event_type == "exec_action":
-                                    log.info("=== WYKONANIE AKCJI SYSTEMOWEJ: %s ===", data.get("action"))
-                                    
+                                    action_name = data.get("action", "")
+                                    req_id = data.get("request_id", "")
+                                    sid = data.get("session_id", "win_client")
+                                    log.info("=== WYKONANIE AKCJI SYSTEMOWEJ: %s (req_id=%s) ===", action_name, req_id)
+
+                                    # Wykonaj akcję przez ActionExecutor
+                                    result_text = ""
+                                    status = "ok"
+                                    try:
+                                        method = getattr(action_executor, action_name, None)
+                                        if method and callable(method):
+                                            result_text = await asyncio.to_thread(method)
+                                        else:
+                                            status = "error"
+                                            result_text = f"Unknown action: {action_name}"
+                                            log.warning("Nieznana akcja od serwera: %s", action_name)
+                                    except Exception as act_err:
+                                        status = "error"
+                                        result_text = str(act_err)
+                                        log.error("Błąd wykonania akcji '%s': %s", action_name, act_err)
+
+                                    # Odeślij wynik do serwera
+                                    if req_id:
+                                        await ws.send(json.dumps({
+                                            "event_type": "exec_action_result",
+                                            "request_id": req_id,
+                                            "status": status,
+                                            "result": result_text,
+                                            "session_id": sid,
+                                        }))
                             except json.JSONDecodeError:
                                 log.error("Nieprawidłowy JSON od serwera.")
                                 

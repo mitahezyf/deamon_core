@@ -77,6 +77,15 @@ class ExecActionEvent(BaseModel):
     action: str
     payload: Optional[Dict[str, Any]] = None
     session_id: str
+    request_id: Optional[str] = None
+
+class ExecActionResultEvent(BaseModel):
+    """Klient → Serwer: wynik wykonania akcji narzędziowej."""
+    event_type: Literal["exec_action_result"] = "exec_action_result"
+    request_id: str
+    status: Literal["ok", "error"] = "ok"
+    result: str = ""
+    session_id: str
 
 class StateChangeEvent(BaseModel):
     event_type: Literal["state_change"] = "state_change"
@@ -87,6 +96,13 @@ class AssistantTextEvent(BaseModel):
     event_type: Literal["assistant_text"] = "assistant_text"
     text: str
     session_id: str
+
+# --- TOOL CALLING (Safe API) ---
+
+class ToolCallPayload(BaseModel):
+    """Walidacja wewnętrzna sparsowanego <tool_call> JSON z LLM."""
+    name: Literal["desktop_action", "request_frame"]
+    arguments: Dict[str, Any] = Field(default_factory=dict)
 
 # --- INTENT ROUTER (Decyzje) ---
 
@@ -112,9 +128,13 @@ class LLMQueryIntent(BaseModel):
     intent_type: Literal["LLM_QUERY"] = "LLM_QUERY"
     query: str = Field(description="Oryginalne zapytanie użytkownika przeznaczone dla LLM (rozmowa, wiedza).")
 
+class SystemCommandIntent(BaseModel):
+    intent_type: Literal["SYSTEM_COMMAND"] = "SYSTEM_COMMAND"
+    action: str = Field(description="Akcja systemowa.")
+
 # Dyskryminowana unia IntentDecision
 IntentDecision = Annotated[
-    Union[VolumeControlIntent, AppControlIntent, SystemStatusIntent, VisionQueryIntent, LLMQueryIntent],
+    Union[VolumeControlIntent, AppControlIntent, SystemStatusIntent, VisionQueryIntent, LLMQueryIntent, SystemCommandIntent],
     Field(discriminator="intent_type")
 ]
 
