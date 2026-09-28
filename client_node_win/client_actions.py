@@ -142,15 +142,10 @@ class ActionExecutor:
         return None
 
     def execute(self, text: str) -> Tuple[bool, str]:
-        # Tier 0 - szybki
+        # Tier 0 - szybki Regex
         res = self.match_regex(text)
         if res:
             return True, res
-            
-        # Tier 1 - semantyczny LLM
-        res = self.match_semantic(text)
-        if res:
-            return True, res
-            
-        # Jeśli nic
+
+        # Tier 1 wyłączony — brak opóźnień sieciowych, bezpośredni powrót do serwera
         return False, ""

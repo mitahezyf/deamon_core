@@ -60,6 +60,8 @@ class ClientSession:
         self.last_prompt_time: float = 0.0
         # Futures do odbierania wyników exec_action z klienta (ReAct loop)
         self.tool_result_futures: Dict[str, asyncio.Future] = {}
+        # Future do odbierania klatki ekranu (request_frame / VisionQuery)
+        self.pending_frame_future: Optional[asyncio.Future] = None
 
     async def disconnect_and_cancel(self):
         log.warning("Zamykanie istniejącej/poprzedniej sesji WebSocket dla klienta %s", self.client_id)
@@ -158,6 +160,16 @@ async def ws_agent(websocket: WebSocket):
                     log.warning("Otrzymano exec_action_result bez pasującego req_id: %s", req_id)
                 continue
 
+            if event_type == "frame_response":
+                # Klatka zrzutu ekranu z klienta — rozwiązujemy pending_frame_future
+                b64 = data.get("image_b64", "")
+                if session.pending_frame_future and not session.pending_frame_future.done():
+                    session.pending_frame_future.set_result(b64)
+                    log.info("Otrzymano frame_response z klienta.")
+                else:
+                    log.warning("Otrzymano frame_response bez oczekującego future.")
+                continue
+
             if event_type == "tts_request":
                 text_to_say = data.get("text", "")
                 session_id = data.get("session_id", "win_client")
@@ -254,17 +266,19 @@ async def ws_agent(websocket: WebSocket):
                                 req_id = str(uuid.uuid4())[:8]
 
                                 if tool_name == "request_frame":
+                                    frame_fut = asyncio.get_event_loop().create_future()
+                                    session.pending_frame_future = frame_fut
                                     req_ev = RequestFrameEvent(session_id=session_id)
                                     await safe_send_text(websocket, req_ev.model_dump_json())
                                     try:
-                                        frame_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
-                                        frame_data = json.loads(frame_msg)
-                                        if frame_data.get("event_type") == "frame_response":
-                                            frame_ev = FrameResponseEvent.model_validate(frame_data)
-                                            return json.dumps({"status": "ok", "result": "Screenshot captured.", "image_b64": frame_ev.image_b64})
+                                        b64_img = await asyncio.wait_for(frame_fut, timeout=5.0)
+                                        return json.dumps({"status": "ok", "result": "Screenshot captured.", "image_b64": b64_img})
                                     except asyncio.TimeoutError:
                                         log.warning("Timeout oczekiwania na frame_response (tool_executor)")
-                                    return json.dumps({"status": "error", "message": "Frame capture timeout"})
+                                        return json.dumps({"status": "error", "message": "Frame capture timeout"})
+                                    finally:
+                                        if session.pending_frame_future is frame_fut:
+                                            session.pending_frame_future = None
 
                                 elif tool_name == "desktop_action":
                                     # Wyślij exec_action do klienta i czekaj na wynik
@@ -293,16 +307,17 @@ async def ws_agent(websocket: WebSocket):
                             # ---- Obsługa zapytań LLM / Vision przez ReAct loop ----
                             image_b64 = None
                             if isinstance(intent, VisionQueryIntent):
+                                frame_fut = asyncio.get_event_loop().create_future()
+                                session.pending_frame_future = frame_fut
                                 req_ev = RequestFrameEvent(session_id=session_id)
                                 await safe_send_text(websocket, req_ev.model_dump_json())
                                 try:
-                                    frame_msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
-                                    frame_data = json.loads(frame_msg)
-                                    if frame_data.get("event_type") == "frame_response":
-                                        frame_ev = FrameResponseEvent.model_validate(frame_data)
-                                        image_b64 = frame_ev.image_b64
+                                    image_b64 = await asyncio.wait_for(frame_fut, timeout=3.0)
                                 except asyncio.TimeoutError:
-                                    log.warning("Timeout oczekiwania na frame_response")
+                                    log.warning("Timeout oczekiwania na frame_response (VisionQuery)")
+                                finally:
+                                    if session.pending_frame_future is frame_fut:
+                                        session.pending_frame_future = None
 
                             await send_state("INFERENCE_LLM", session_id)
                             query = intent.query

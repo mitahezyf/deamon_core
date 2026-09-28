@@ -20,6 +20,33 @@ ALLOWED_ACTIONS = frozenset([
     "get_time", "get_date", "get_sys_status",
 ])
 
+# Heurystyka ratunkowa (Safety Net) na wypadek, gdy model w rundzie 1 zwróci pusty bufor
+HEURISTIC_COMMANDS = [
+    (re.compile(r"(która\s+(jest\s+)?godzina|jaki\s+(mamy\s+)?czas|podaj\s+czas|\bgodzina\b)", re.IGNORECASE), "get_time"),
+    (re.compile(r"(jaka\s+(jest\s+)?data|który\s+(jest\s+)?dzisiaj|jaki\s+mamy\s+dzień|\bdata\b)", re.IGNORECASE), "get_date"),
+    (re.compile(r"(stan\s+systemu|użycie\s+(procesora|cpu|ram|pamięci))", re.IGNORECASE), "get_sys_status"),
+    (re.compile(r"(podgłośnij|głośniej|zwiększ\s+głośność)", re.IGNORECASE), "vol_up"),
+    (re.compile(r"(ścisz|ciszej|zmniejsz\s+głośność)", re.IGNORECASE), "vol_down"),
+    (re.compile(r"(wycisz|zmutuj|wyłącz\s+dźwięk)", re.IGNORECASE), "vol_mute"),
+    (re.compile(r"(odcisz|włącz\s+dźwięk)", re.IGNORECASE), "vol_unmute"),
+    (re.compile(r"(zablokuj\s+(komputer|ekran|system))", re.IGNORECASE), "lock_system"),
+    (re.compile(r"(otwórz|włącz|uruchom)\s+(kalkulator)", re.IGNORECASE), "open_calc"),
+    (re.compile(r"(otwórz|włącz|uruchom)\s+(notatnik)", re.IGNORECASE), "open_notepad"),
+    (re.compile(r"(otwórz|włącz|uruchom)\s+(menedżer\s+zadań|taskmgr)", re.IGNORECASE), "open_taskmgr"),
+    (re.compile(r"(otwórz|włącz|uruchom)\s+(terminal|powershell|konsolę)", re.IGNORECASE), "open_powershell"),
+    (re.compile(r"(otwórz|włącz|uruchom)\s+(przeglądarkę|chrome|edge|firefox)", re.IGNORECASE), "open_browser"),
+    (re.compile(r"(zrób\s+zrzut|screenshot|pokaż\s+ekran|zobacz\s+ekran|co\s+(jest|widzisz)\s+na\s+ekranie)", re.IGNORECASE), "request_frame"),
+]
+
+def match_heuristic_tool(text: str) -> Optional[dict]:
+    """Dopasowuje zapytanie użytkownika do Safe API tool call w przypadku pustej odpowiedzi modelu."""
+    for pattern, action_name in HEURISTIC_COMMANDS:
+        if pattern.search(text):
+            if action_name == "request_frame":
+                return {"name": "request_frame", "arguments": {}}
+            return {"name": "desktop_action", "arguments": {"action": action_name}}
+    return None
+
 
 # ============================================================================
 # TagAwareBuffer — maszyna stanów filtrująca <tool_call> i <think> ze strumienia
@@ -29,13 +56,14 @@ class TagAwareBuffer:
     Bufor z maszyną stanów rozstrzygającą, czy napływające tokeny to:
     - zwykły tekst (przepuszczany do TTS),
     - znacznik <tool_call>…</tool_call> (wyodrębniony jako JSON),
-    - znacznik <think>…</think> (odrzucany w ciszy).
+    - znacznik <think>…</think> / <thought>…</thought> (odrzucany w ciszy).
 
-    Obsługuje poszatkowane tokeny SSE (np. "<tool_" + "call>").
+    Obsługuje poszatkowane tokeny SSE (np. "<tool_" + "call>"), tagi z atrybutami,
+    wywołania narzędzi osadzone wewnątrz myślenia oraz urwane tagi na końcu strumienia.
     Żaden fragment XML/JSON nie trafia do silnika mowy.
     """
 
-    _OPEN_TAGS = ("<tool_call>", "<think>")
+    _OPEN_PREFIXES = ("<tool_call", "<think", "<thought")
 
     def __init__(self):
         self.state: str = "NORMAL"       # NORMAL | IN_TOOL_CALL | IN_THINK
@@ -43,9 +71,9 @@ class TagAwareBuffer:
         self._tool_call_buf: str = ""     # treść wewnątrz <tool_call>…</tool_call>
         self._think_buf: str = ""         # bufor wewnątrz <think> (do detekcji zamknięcia)
 
-    # ---- Prywatna metoda: czy `candidate` jest prefixem dowolnego OPEN tagu ----
     def _is_prefix_of_any(self, candidate: str) -> bool:
-        return any(tag.startswith(candidate) for tag in self._OPEN_TAGS)
+        """Sprawdza czy candidate pasuje do prefiksu lub początku któregoś ze znanych tagów."""
+        return any(p.startswith(candidate) or candidate.startswith(p) for p in self._OPEN_PREFIXES)
 
     def feed(self, text: str) -> tuple[str, list[str]]:
         """
@@ -58,17 +86,16 @@ class TagAwareBuffer:
         for ch in text:
             if self.state == "NORMAL":
                 if ch == "<" and not self._tag_candidate:
-                    # Potencjalny początek tagu — zawieszamy wypychanie
                     self._tag_candidate = "<"
                 elif self._tag_candidate:
                     self._tag_candidate += ch
                     if self._is_prefix_of_any(self._tag_candidate):
-                        # Nadal pasuje do prefiksu — kontynuujemy buforowanie
-                        if self._tag_candidate == "<tool_call>":
+                        # Sprawdzamy czy osiągnęliśmy domknięcie nawiasu otwierającego tagu '>'
+                        if self._tag_candidate.startswith("<tool_call") and ch == ">":
                             self.state = "IN_TOOL_CALL"
                             self._tag_candidate = ""
                             self._tool_call_buf = ""
-                        elif self._tag_candidate == "<think>":
+                        elif (self._tag_candidate.startswith("<think") or self._tag_candidate.startswith("<thought")) and ch == ">":
                             self.state = "IN_THINK"
                             self._tag_candidate = ""
                             self._think_buf = ""
@@ -78,11 +105,11 @@ class TagAwareBuffer:
                             clean_parts.append(self._tag_candidate[0])
                             self._tag_candidate = self._tag_candidate[1:]
                         if self._tag_candidate:
-                            if self._tag_candidate == "<tool_call>":
+                            if self._tag_candidate.startswith("<tool_call") and self._tag_candidate.endswith(">"):
                                 self.state = "IN_TOOL_CALL"
                                 self._tag_candidate = ""
                                 self._tool_call_buf = ""
-                            elif self._tag_candidate == "<think>":
+                            elif (self._tag_candidate.startswith("<think") or self._tag_candidate.startswith("<thought")) and self._tag_candidate.endswith(">"):
                                 self.state = "IN_THINK"
                                 self._tag_candidate = ""
                                 self._think_buf = ""
@@ -91,8 +118,15 @@ class TagAwareBuffer:
 
             elif self.state == "IN_TOOL_CALL":
                 self._tool_call_buf += ch
-                if self._tool_call_buf.endswith("</tool_call>"):
-                    json_str = self._tool_call_buf[: -len("</tool_call>")].strip()
+                # Sprawdzamy domknięcie tagu narzędzia: </tool_call>, </tool>, </function>
+                m_close = re.search(r'</(?:tool_call|tool|function)>', self._tool_call_buf, re.IGNORECASE)
+                if m_close:
+                    raw_content = self._tool_call_buf[:m_close.start()].strip()
+                    # Czyścimy ewentualne backticki Markdown
+                    raw_content = re.sub(r'^```(?:json)?|```$', '', raw_content).strip()
+                    # Szukamy bloku JSON
+                    m_json = re.search(r'(\{[\s\S]*\})', raw_content)
+                    json_str = m_json.group(1).strip() if m_json else raw_content
                     if json_str:
                         tool_calls.append(json_str)
                     self._tool_call_buf = ""
@@ -100,7 +134,20 @@ class TagAwareBuffer:
 
             elif self.state == "IN_THINK":
                 self._think_buf += ch
-                if self._think_buf.endswith("</think>"):
+                # Sprawdzamy czy wewnątrz bloku myślenia nie ukryto pełnego <tool_call>...</tool_call>
+                m_embedded = re.search(r'<tool_call[^>]*>([\s\S]*?)</(?:tool_call|tool|function)>', self._think_buf, re.IGNORECASE)
+                if m_embedded:
+                    raw_tc = m_embedded.group(1).strip()
+                    raw_tc = re.sub(r'^```(?:json)?|```$', '', raw_tc).strip()
+                    m_json = re.search(r'(\{[\s\S]*\})', raw_tc)
+                    json_str = m_json.group(1).strip() if m_json else raw_tc
+                    if json_str:
+                        tool_calls.append(json_str)
+                    self._think_buf = self._think_buf[:m_embedded.start()] + self._think_buf[m_embedded.end():]
+
+                # Sprawdzamy domknięcie bloku myślenia: </think>, </thought>
+                m_close_think = re.search(r'</(?:think|thought)>', self._think_buf, re.IGNORECASE)
+                if m_close_think:
                     self._think_buf = ""
                     self.state = "NORMAL"
 
@@ -114,19 +161,41 @@ class TagAwareBuffer:
         remaining = ""
         tool_calls: list[str] = []
 
-        # Tag candidate, który nigdy nie trafił do żadnego stanu
+        # Tag candidate, który nigdy nie stał się pełnym tagiem
         if self._tag_candidate:
             remaining += self._tag_candidate
             self._tag_candidate = ""
 
-        # Niedokończony tool_call (model urwał w połowie) — ignorujemy JSON
+        # Niedokończony tool_call (model urwał przed tagiem zamykającym) — odzyskujemy JSON
         if self.state == "IN_TOOL_CALL" and self._tool_call_buf:
-            log.warning("TagAwareBuffer.flush: Niedokończony <tool_call>, ignoruję: %s",
-                        self._tool_call_buf[:80])
-            self._tool_call_buf = ""
+            clean_buf = self._tool_call_buf.strip()
+            clean_buf = re.sub(r'^```(?:json)?|```$', '', clean_buf).strip()
+            m_json = re.search(r'(\{[\s\S]*\})', clean_buf)
+            if m_json:
+                try:
+                    parsed = json.loads(m_json.group(1))
+                    if isinstance(parsed, dict) and "name" in parsed:
+                        tool_calls.append(m_json.group(1))
+                        self._tool_call_buf = ""
+                except json.JSONDecodeError:
+                    pass
+            if self._tool_call_buf:
+                log.warning("TagAwareBuffer.flush: Niedokończony <tool_call>, treść: %s", self._tool_call_buf[:80])
+                self._tool_call_buf = ""
 
-        # Niedokończony think — po prostu odrzucamy
-        if self.state == "IN_THINK":
+        # Niedokończony think — szukamy czy nie ma tam ukrytego tool calla
+        if self.state == "IN_THINK" and self._think_buf:
+            m_tc = re.search(r'<tool_call[^>]*>([\s\S]*?)(?:</(?:tool_call|tool|function)>|$)', self._think_buf, re.IGNORECASE)
+            if m_tc:
+                clean_tc = m_tc.group(1).strip()
+                m_json = re.search(r'(\{[\s\S]*\})', clean_tc)
+                if m_json:
+                    try:
+                        parsed = json.loads(m_json.group(1))
+                        if isinstance(parsed, dict) and "name" in parsed:
+                            tool_calls.append(m_json.group(1))
+                    except json.JSONDecodeError:
+                        pass
             self._think_buf = ""
 
         self.state = "NORMAL"
@@ -361,6 +430,7 @@ class DaemonBrain:
         messages = self._build_messages(prompt, image_b64)
 
         log.debug("Brain ReAct: Start (model=%s, max_rounds=%d)", server_settings.model_brain, max_rounds)
+        speech_emitted = False
 
         try:
             for round_idx in range(max_rounds):
@@ -372,6 +442,7 @@ class DaemonBrain:
                     clean, tool_calls = tag_buf.feed(raw_token)
                     if clean:
                         round_text += clean
+                        speech_emitted = True
                         yield clean
                     tool_calls_found.extend(tool_calls)
 
@@ -379,8 +450,38 @@ class DaemonBrain:
                 remaining, final_tcs = tag_buf.flush()
                 if remaining:
                     round_text += remaining
+                    speech_emitted = True
                     yield remaining
                 tool_calls_found.extend(final_tcs)
+
+                # Fallback A: jeśli brak tool_calls z tagów, sprawdź czy model nie zwrócił surowego JSON-a
+                if not tool_calls_found:
+                    stripped_raw = round_text.strip()
+                    m_json = re.search(r'(\{[\s\S]*?"name"[\s\S]*?\})', stripped_raw)
+                    if m_json:
+                        try:
+                            parsed_tc = json.loads(m_json.group(1))
+                            if isinstance(parsed_tc, dict) and parsed_tc.get("name") in ALLOWED_TOOLS:
+                                log.info("Brain ReAct: Wykryto surowy JSON tool call bez tagów <tool_call>: %s", parsed_tc.get("name"))
+                                tool_calls_found.append(m_json.group(1))
+                                round_text = ""
+                        except Exception:
+                            pass
+
+                # Fallback B (Safety Net dla rundy 1): blokada stanu tekst=0, tool_calls=0
+                if round_idx == 0 and not round_text.strip() and not tool_calls_found:
+                    log.warning("Brain ReAct: Runda 1 zwróciła pustą odpowiedź (tekst=0, tool_calls=0). Uruchamiam Safety Net dla: '%s'", prompt[:60])
+                    heuristic_tc = match_heuristic_tool(prompt)
+                    if heuristic_tc:
+                        log.info("Brain ReAct: Heurystyka ratunkowa wyzwoliła akcję: %s", heuristic_tc)
+                        tool_calls_found.append(json.dumps(heuristic_tc))
+                    else:
+                        # Brak dopasowania akcji — ponawiamy w rundzie 2 z jawnym żądaniem odpowiedzi głosem
+                        messages.append({
+                            "role": "user",
+                            "content": f"Odpowiedz bezpośrednio i zwięźle (maksymalnie 1-2 zdania) na pytanie: {prompt}"
+                        })
+                        continue
 
                 log.info("Brain ReAct runda %d: tekst=%d znaków, tool_calls=%d",
                          round_idx + 1, len(round_text), len(tool_calls_found))
@@ -449,6 +550,11 @@ class DaemonBrain:
                              tool_name, tool_args, result_json_for_content[:120], bool(extracted_b64))
 
                 # Kontynuuj do następnej rundy — model wygeneruje potwierdzenie
+
+            # Gwarancja braku ciszy — jeśli model zakończył pętlę bez wygenerowania tekstu
+            if not speech_emitted:
+                log.warning("Brain ReAct: Model nie wygenerował żadnego tekstu mowy po %d rundach — emituję fallback.", round_idx + 1)
+                yield "Słucham cię wodzu, jak mogę pomóc?"
 
             log.info("Brain ReAct: Zakończono po %d rundach.", round_idx + 1)
 

@@ -18,11 +18,21 @@ except ImportError:
 @dataclass
 class ClientSettings:
     daemon_server_url: str = os.getenv("DAEMON_SERVER_URL", "ws://192.168.0.103:8000/api/v1/ws/agent")
-    wakeword_model: str = os.getenv("WAKEWORD_MODEL", "alexa")
-    wakeword_threshold: float = float(os.getenv("WAKEWORD_THRESHOLD", "0.5"))
+    wakeword_model_name: str = os.getenv("WAKEWORD_MODEL_NAME", os.getenv("WAKEWORD_MODEL", "hey_jarvis"))
+    wakeword_threshold: float = float(os.getenv("WAKEWORD_THRESHOLD", "0.6"))
+    whisper_no_speech_threshold: float = float(os.getenv("WHISPER_NO_SPEECH_THRESHOLD", "0.6"))
+    whisper_vad_filter: bool = os.getenv("WHISPER_VAD_FILTER", "True").lower() in ("true", "1", "yes")
     vad_silence_timeout_ms: int = int(os.getenv("VAD_SILENCE_TIMEOUT_MS", "700"))
     whisper_model_name: str = os.getenv("WHISPER_MODEL_NAME", "small")
     whisper_device: str = os.getenv("WHISPER_DEVICE", "cuda")
     whisper_compute_type: str = os.getenv("WHISPER_COMPUTE_TYPE", "float16")
     daemon_ollama_host: str = os.getenv("DAEMON_OLLAMA_HOST", "http://192.168.0.215:11434")
     model_router: str = os.getenv("DAEMON_MODEL_ROUTER", "huihui_ai/qwen3.5-abliterated:0.8b")
+
+    @property
+    def wakeword_model(self) -> str:
+        """Alias kompatybilności wstecznej."""
+        return self.wakeword_model_name
+
+
+client_settings = ClientSettings()

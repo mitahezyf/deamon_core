@@ -20,7 +20,7 @@ class ServerSettings(BaseSettings):
     model_brain: str = "huihui_ai/qwen3.5-abliterated:9b"
     model_router: str = "huihui_ai/qwen3.5-abliterated:0.8b"
 
-    router_timeout: float = 3.0
+    router_timeout: float = 0.4
     brain_ttft_timeout: float = 60.0
 
     language: str = "pl"

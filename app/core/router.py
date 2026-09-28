@@ -24,7 +24,7 @@ class DaemonRouter:
     def __init__(self, timeout: Optional[float] = None):
         # Odpytujemy natywne API Ollamy
         self.ollama_url = f"{server_settings.ollama_host}/api/chat"
-        self.timeout = timeout if timeout is not None else getattr(server_settings, "router_timeout", 3.0)
+        self.timeout = timeout if timeout is not None else getattr(server_settings, "router_timeout", 0.4)
 
         self._adapter = TypeAdapter(IntentDecision)
 
@@ -80,7 +80,7 @@ class DaemonRouter:
         }
 
         try:
-            timeout_cfg = httpx.Timeout(self.timeout, connect=min(2.0, self.timeout))
+            timeout_cfg = httpx.Timeout(self.timeout, connect=min(0.2, self.timeout))
             async with httpx.AsyncClient(timeout=timeout_cfg) as client:
                 response = await client.post(self.ollama_url, json=payload)
                 response.raise_for_status()
@@ -94,9 +94,9 @@ class DaemonRouter:
                 else:
                     content = str(data)
                 
-                # Walidacja: pusta odpowiedź od modelu Ollamy
+                # Walidacja: pusta odpowiedź od modelu Ollamy -> natychmiast LLM_QUERY
                 if not content or not content.strip():
-                    log.warning("Router: Otrzymano pustą odpowiedź od modelu Ollamy. Fallback do LLM_QUERY.")
+                    log.debug("Router: Pusta odpowiedź z Ollama router. Natychmiastowy fallback do LLM_QUERY.")
                     return LLMQueryIntent(query=text)
 
                 content_clean = content.strip()
@@ -106,13 +106,13 @@ class DaemonRouter:
                     log.debug("Router: LLM zwrocil intent '%s' (session_id=%s)", intent.intent_type, session_id)
                     return intent
                 except Exception as val_err:
-                    log.warning("Router: Odpowiedź modelu nie spełnia schematu JSON (%s): %s. Fallback do LLM_QUERY.", val_err, content_clean[:80])
+                    log.debug("Router: Odpowiedź nie pasuje do schematu (%s). Fallback do LLM_QUERY.", val_err)
                     return LLMQueryIntent(query=text)
 
         except httpx.TimeoutException:
-            log.warning("Router: Timeout %ss przy odpytywaniu Ollamy. Fallback do LLM_QUERY.", self.timeout)
+            log.debug("Router: Szybki timeout routera (%ss). Bezpośredni fallback do LLM_QUERY.", self.timeout)
         except httpx.ConnectError as e:
-            log.warning("Router: Brak połączenia z Ollamą (%s). Fallback do LLM_QUERY.", e)
+            log.debug("Router: Brak połączenia z Ollamą (%s). Fallback do LLM_QUERY.", e)
         except httpx.HTTPError as e:
             log.error("Router: Blad HTTP: %s. Fallback do LLM_QUERY.", e)
         except Exception as e:

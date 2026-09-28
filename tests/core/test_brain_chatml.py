@@ -232,3 +232,50 @@ class TestSafeAPIWhitelist:
         assert len(t) == 1
         parsed = json.loads(t[0])
         assert parsed["arguments"]["action"] == "vol_up"
+
+    def test_tool_call_inside_think_tag(self):
+        """Tool call osadzony wewnątrz bloku <think>...</think> jest poprawnie wydobywany."""
+        buf = TagAwareBuffer()
+        raw = (
+            "<think>Użytkownik pyta o godzinę. Wywołam akcję:\n"
+            '<tool_call>\n{"name": "desktop_action", "arguments": {"action": "get_time"}}\n</tool_call>\n'
+            "Koniec planu.</think>"
+        )
+        c, t = buf.feed(raw)
+        assert c == ""
+        assert len(t) == 1
+        parsed = json.loads(t[0])
+        assert parsed["arguments"]["action"] == "get_time"
+
+    def test_thought_tag_filtered(self):
+        """Znacznik <thought>...</thought> jest poprawnie filtrowany jak <think>."""
+        buf = TagAwareBuffer()
+        c, t = buf.feed("<thought>Rozważam sprawę...</thought>Dzień dobry, wodzu.")
+        assert c == "Dzień dobry, wodzu."
+        assert t == []
+
+    def test_flush_recovers_unclosed_tool_call_json(self):
+        """Gdy strumień urwał się przed </tool_call>, flush() odzyskuje poprawny JSON."""
+        buf = TagAwareBuffer()
+        buf.feed('<tool_call>\n{"name": "desktop_action", "arguments": {"action": "get_date"}}')
+        remaining, tcs = buf.flush()
+        assert len(tcs) == 1
+        parsed = json.loads(tcs[0])
+        assert parsed["arguments"]["action"] == "get_date"
+
+    def test_match_heuristic_tool_time(self):
+        """Heurystyka ratunkowa wykrywa zapytanie o godzinę."""
+        from app.core.brain import match_heuristic_tool
+        res = match_heuristic_tool("wodzu, która jest godzina?")
+        assert res is not None
+        assert res["name"] == "desktop_action"
+        assert res["arguments"]["action"] == "get_time"
+
+    def test_whisper_hallucination_cleaning(self):
+        """Filtr halucynacji Whispera usuwa puste frazy typu Dzień dobry!."""
+        from client_node_win.client_ears import clean_whisper_text
+        assert clean_whisper_text("Dzień dobry!") == ""
+        assert clean_whisper_text("Dziękuję za uwagę.") == ""
+        assert clean_whisper_text("Napisy stworzone przez społeczność") == ""
+        assert clean_whisper_text("a") == ""
+        assert clean_whisper_text("Która godzina?") == "Która godzina?"

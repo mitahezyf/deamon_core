@@ -19,8 +19,16 @@ import asyncio
 import logging
 import queue
 import threading
-import numpy as np
-import sounddevice as sd
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import sounddevice as sd
+except ImportError:
+    sd = None
 
 log = logging.getLogger("client.ears")
 
@@ -37,6 +45,31 @@ except ImportError:
     load_silero_vad = None
     VADIterator = None
 
+# Znane halucynacje Whisper na ciszy/szumie tła
+WHISPER_HALLUCINATIONS = frozenset([
+    "dzień dobry!", "dzień dobry.", "dzień dobry",
+    "dziękuję za uwagę.", "dziękuję za uwagę", "dziękuję.", "dziękuję",
+    "napisy stworzone przez", "napisy stworzone przez społeczność amara.org",
+    "subskrybuj kanał", "subskrybuj", "do widzenia.", "do widzenia!", "do widzenia",
+    "dziękuję bardzo.", "dziękuję bardzo!", "dziękuję bardzo",
+    "dzięki za uwagę.", "dzięki za uwagę",
+    "proszę o subskrypcję", "oglądaj dalej",
+])
+
+def clean_whisper_text(text: str) -> str:
+    """Odrzuca znane halucynacje Whispera na pustym/cichym audio."""
+    stripped = text.strip()
+    if len(stripped) < 2:
+        return ""
+    lower = stripped.lower()
+    if lower in WHISPER_HALLUCINATIONS:
+        log.warning("Odrzucono halucynację Whispera: '%s'", stripped)
+        return ""
+    if "napisy stworzone przez" in lower or "amara.org" in lower:
+        log.warning("Odrzucono halucynację napisów: '%s'", stripped)
+        return ""
+    return stripped
+
 class ClientEars:
     def __init__(self):
         import sys
@@ -51,9 +84,12 @@ class ClientEars:
         self._is_listening = False
         self._active_lock = threading.Lock()
         self._stream = None
-        self.wake_word_name = client_settings.wakeword_model
+        self.wake_word_name = client_settings.wakeword_model_name
+        self.wake_word_threshold = client_settings.wakeword_threshold
         self.vad_timeout = client_settings.vad_silence_timeout_ms
         self.whisper_compute = client_settings.whisper_compute_type
+        self.whisper_no_speech_threshold = client_settings.whisper_no_speech_threshold
+        self.whisper_vad_filter = client_settings.whisper_vad_filter
         
         if OWWModel and WhisperModel and load_silero_vad:
             log.info("Ladowanie modelu openWakeWord...")
@@ -135,9 +171,15 @@ class ClientEars:
                 prediction = self.oww_model.predict(audio_data)
                 
                 for mdl, score in prediction.items():
-                    if score > 0.5:
+                    # Weryfikacja zgodności z wybranym modelem WakeWord
+                    is_target_model = (
+                        not self.wake_word_name 
+                        or self.wake_word_name.lower() in mdl.lower()
+                        or mdl.lower() in self.wake_word_name.lower()
+                    )
+                    if is_target_model and score >= self.wake_word_threshold:
                         ww_detected = True
-                        log.info(f"WakeWord WYKRYTY! (score: {score:.2f})")
+                        log.info(f"WakeWord WYKRYTY! ({mdl}, score: {score:.2f} >= {self.wake_word_threshold})")
                         break
 
             # Nagrywanie po aktywacji - Silero VAD
@@ -195,17 +237,26 @@ class ClientEars:
             audio_float32 = full_audio.astype(np.float32) / 32768.0
             
             def transcribe():
+                stt_kwargs = {
+                    "beam_size": 5,
+                    "language": "pl",
+                    "condition_on_previous_text": False,
+                    "no_speech_threshold": self.whisper_no_speech_threshold,
+                    "vad_filter": self.whisper_vad_filter,
+                }
                 try:
-                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl", vad_filter=False)
-                    return " ".join([s.text for s in segments]).strip()
+                    segments, info = self.stt_model.transcribe(audio_float32, **stt_kwargs)
+                    raw_text = " ".join([s.text for s in segments]).strip()
+                    return clean_whisper_text(raw_text)
                 except ValueError as ve:
                     log.error(f"Błąd wartości (ValueError) przy transkrypcji Whisper: {ve}")
                     return ""
                 except Exception as ex:
                     log.warning(f"Nieznany błąd GPU podczas transkrypcji: {ex}. Próba ratunkowego fallbacku na CPU...")
                     self.stt_model = WhisperModel(self._stt_model_name, device="cpu", compute_type="int8", local_files_only=True)
-                    segments, info = self.stt_model.transcribe(audio_float32, beam_size=5, language="pl", vad_filter=False)
-                    return " ".join([s.text for s in segments]).strip()
+                    segments, info = self.stt_model.transcribe(audio_float32, **stt_kwargs)
+                    raw_text = " ".join([s.text for s in segments]).strip()
+                    return clean_whisper_text(raw_text)
                 
             command_text = await asyncio.to_thread(transcribe)
             log.info(f"STT Wynik: {command_text}")
