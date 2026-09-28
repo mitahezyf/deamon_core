@@ -18,7 +18,7 @@ except ImportError:
 @dataclass
 class ClientSettings:
     daemon_server_url: str = os.getenv("DAEMON_SERVER_URL", "ws://192.168.0.103:8000/api/v1/ws/agent")
-    wakeword_model_name: str = os.getenv("WAKEWORD_MODEL_NAME", os.getenv("WAKEWORD_MODEL", "hey_jarvis"))
+    wakeword_model_name: str = os.getenv("WAKEWORD_MODEL_NAME", os.getenv("WAKEWORD_MODEL", "deamon"))
     wakeword_threshold: float = float(os.getenv("WAKEWORD_THRESHOLD", "0.6"))
     whisper_no_speech_threshold: float = float(os.getenv("WHISPER_NO_SPEECH_THRESHOLD", "0.6"))
     whisper_vad_filter: bool = os.getenv("WHISPER_VAD_FILTER", "True").lower() in ("true", "1", "yes")
