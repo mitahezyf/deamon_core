@@ -38,6 +38,20 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import client_settings
 
+
+
+def is_ws_alive(ws) -> bool:
+    if ws is None:
+        return False
+    # Obsługa websockets < 13
+    if hasattr(ws, "closed"):
+        return not ws.closed
+    # Obsługa websockets >= 13 (ClientConnection)
+    return getattr(ws, "close_code", None) is None
+
+
+
+
 DAEMON_URL = client_settings.daemon_server_url
 _HEADER_FMT = ">I"
 
@@ -65,7 +79,7 @@ async def ws_loop():
                 input_task = None
 
             # 2. Bezpieczne zamknięcie poprzedniego gniazda jeśli nadal otwarte
-            if active_ws and not active_ws.closed:
+            if active_ws and getattr(active_ws, "close_code", None) is None:
                 try:
                     await active_ws.close()
                 except Exception:
@@ -81,9 +95,9 @@ async def ws_loop():
                 async def mic_input():
                     nonlocal last_text, last_text_time
                     try:
-                        while not ws.closed:
+                        while is_ws_alive(ws):
                             text = await ears.listen_for_command(is_muted_func=lambda: mouth.is_playing)
-                            if not text or ws.closed:
+                            if not text or not is_ws_alive(ws):
                                 continue
 
                             # Debounce po stronie klienta (eliminacja podwójnego STT w krótkim oknie)
@@ -130,9 +144,7 @@ async def ws_loop():
                 
                 # Odbiór wiadomości
                 try:
-                    while not ws.closed:
-                        msg = await ws.recv()
-                        
+                    async for msg in ws:
                         if isinstance(msg, str):
                             # Wiadomość tekstowa (JSON)
                             try:
